@@ -1,0 +1,36 @@
+{% extends "accounts/base.html" %}
+
+{% block title %}Iniciar sesión | MathTutor AI{% endblock %}
+
+{% block content %}
+<h2 class="h4">Iniciar sesión</h2>
+<p class="text-secondary">Entra para practicar tus sumas.</p>
+
+{% if form.errors %}
+<div class="alert alert-danger" role="alert">
+    Revisa tu usuario y contraseña e inténtalo nuevamente.
+</div>
+{% endif %}
+
+<form method="post" action="{% url 'accounts:login' %}">
+    {% csrf_token %}
+
+    <div class="mb-3">
+        <label for="id_username" class="form-label">Usuario</label>
+        <input type="text" name="username" id="id_username"
+               class="form-control" autocomplete="username"
+               value="{{ form.username.value|default_if_none:'' }}"
+               maxlength="150" required autofocus>
+    </div>
+
+    <div class="mb-4">
+        <label for="id_password" class="form-label">Contraseña</label>
+        <input type="password" name="password" id="id_password"
+               class="form-control"
+               autocomplete="current-password" required>
+    </div>
+
+    <input type="hidden" name="next" value="{{ next }}">
+    <button type="submit" class="btn btn-primary w-100">Entrar</button>
+</form>
+{% endblock %}
