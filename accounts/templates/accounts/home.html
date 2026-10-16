@@ -11,6 +11,11 @@
     Este es tu espacio para practicar sumas paso a paso.
 </p>
 
+<a href="{% url 'tutoring:exercise_list' %}"
+   class="btn btn-primary w-100 mb-3">
+    Ver sumas disponibles
+</a>
+
 <form method="post" action="{% url 'accounts:logout' %}">
     {% csrf_token %}
     <button type="submit" class="btn btn-outline-primary">
