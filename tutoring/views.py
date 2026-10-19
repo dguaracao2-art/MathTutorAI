@@ -5,7 +5,9 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
 from .models import Exercise
+from django.http import JsonResponse
 
+from .forms import PhotoUploadForm
 
 @never_cache
 @login_required
@@ -72,3 +74,51 @@ def exercise_detail(request):
         "tutoring/exercise_detail.html",
         {"exercise": exercise},
     )
+
+@never_cache
+@require_POST
+def upload_photo(request):
+    if not request.user.is_authenticated:
+        return JsonResponse(
+            {"error": "Tu sesión terminó. Vuelve a iniciar sesión."},
+            status=401,
+        )
+
+    selected = request.session.get("selected_exercise")
+
+    if not selected:
+        return JsonResponse(
+            {"error": "Primero elige una suma desde el banco."},
+            status=409,
+        )
+
+    exercise = Exercise.objects.filter(
+        pk=selected["id"],
+        operand_a=selected["operand_a"],
+        operand_b=selected["operand_b"],
+        is_active=True,
+    ).first()
+
+    if (
+        exercise is None
+        or request.POST.get("exercise_id") != str(exercise.pk)
+    ):
+        return JsonResponse(
+            {
+                "error": (
+                    "La suma cambió o ya no está disponible. "
+                    "Vuelve al banco y elígela nuevamente."
+                )
+            },
+            status=409,
+        )
+
+    form = PhotoUploadForm(request.POST, request.FILES)
+
+    if not form.is_valid():
+        return JsonResponse(
+            {"error": form.errors["photo"][0]},
+            status=400,
+        )
+
+    return JsonResponse({"ok": True})

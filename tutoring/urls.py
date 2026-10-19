@@ -16,4 +16,9 @@ urlpatterns = [
         views.exercise_detail,
         name="exercise_detail",
     ),
+    path(
+        "fotografia/",
+        views.upload_photo,
+        name="upload_photo",
+    ),
 ]

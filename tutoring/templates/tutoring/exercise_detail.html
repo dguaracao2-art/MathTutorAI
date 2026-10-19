@@ -1,4 +1,5 @@
 {% extends "accounts/base.html" %}
+{% load static %}
 
 {% block title %}Suma elegida | MathTutor AI{% endblock %}
 
@@ -26,6 +27,60 @@
     {% endif %}
 </p>
 
+<hr class="my-4">
+
+<h3 class="h5">Fotografía de tu solución</h3>
+
+<p class="text-secondary">
+    Incluye los dos números y tu resultado.
+    Usa buena iluminación y evita las sombras.
+</p>
+
+<form id="photo-form"
+      method="post"
+      enctype="multipart/form-data"
+      action="{% url 'tutoring:upload_photo' %}">
+    {% csrf_token %}
+
+    <input type="hidden"
+           name="exercise_id"
+           value="{{ exercise.pk }}">
+
+    <div class="mb-3">
+        <label for="id_photo" class="form-label">
+            Selecciona tu fotografía
+        </label>
+
+        <input type="file"
+               name="photo"
+               id="id_photo"
+               class="form-control"
+               accept=".jpg,.jpeg,.png"
+               aria-describedby="photo-help"
+               required>
+
+        <div id="photo-help" class="form-text">
+            JPG o PNG. Máximo 5 MB y 20 megapíxeles.
+        </div>
+    </div>
+
+    <button type="submit"
+            id="upload-button"
+            class="btn btn-primary w-100">
+        Cargar fotografía
+    </button>
+</form>
+
+<div id="photo-message" role="alert" hidden></div>
+
+<div id="photo-preview-box" class="mt-4" hidden>
+    <h3 class="h5">Vista previa</h3>
+
+    <img id="photo-preview"
+         class="img-fluid rounded border d-block mx-auto"
+         alt="Fotografía de tu solución manuscrita">
+</div>
+
 <div class="d-flex gap-2 flex-wrap mt-4">
     <a href="{% url 'tutoring:exercise_list' %}"
        class="btn btn-outline-primary">
@@ -39,4 +94,6 @@
         </button>
     </form>
 </div>
+
+<script src="{% static 'tutoring/photo_upload.js' %}" defer></script>
 {% endblock %}
