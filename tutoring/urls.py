@@ -21,4 +21,6 @@ urlpatterns = [
         views.upload_photo,
         name="upload_photo",
     ),
+        path("confirmar/", views.confirm_sum, name="confirm_sum"),
+        
 ]

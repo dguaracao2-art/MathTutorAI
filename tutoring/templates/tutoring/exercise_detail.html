@@ -114,7 +114,7 @@
          class="img-fluid rounded border d-block mx-auto"
          alt="Fotografía de tu solución manuscrita">
 </div>
-
+{% include "tutoring/_sum_confirmation.html" %}
 <div class="d-flex gap-2 flex-wrap mt-4">
     <a href="{% url 'tutoring:exercise_list' %}"
        class="btn btn-outline-primary">
@@ -131,4 +131,5 @@
 
 <script src="{% static 'tutoring/photo_upload.js' %}" defer></script>
 <script src="{% static 'tutoring/camera_capture.js' %}" defer></script>
+<script src="{% static 'tutoring/sum_confirmation.js' %}" defer></script>
 {% endblock %}
