@@ -1,0 +1,39 @@
+<div id="confirmation-box" class="mt-4" hidden>
+    <h3 class="h5">Confirma los números de tu foto</h3>
+
+    <p class="text-secondary">
+        Revisa la fotografía y escribe los dos números
+        y el resultado que aparece en tu hoja.
+    </p>
+
+    <form id="confirmation-form"
+          method="post"
+          enctype="multipart/form-data"
+          action="{% url 'tutoring:confirm_sum' %}">
+        {% csrf_token %}
+
+        <input type="hidden"
+               name="exercise_id"
+               value="{{ exercise.pk }}">
+
+        {% for field in confirmation_form %}
+            {% if field.name != "photo" %}
+                <div class="mb-3">
+                    <label for="{{ field.id_for_label }}"
+                           class="form-label">
+                        {{ field.label }}
+                    </label>
+                    {{ field }}
+                </div>
+            {% endif %}
+        {% endfor %}
+
+        <button type="submit"
+                id="confirm-button"
+                class="btn btn-primary w-100">
+            Confirmar números
+        </button>
+    </form>
+
+    <div id="confirmation-message" role="alert" hidden></div>
+</div>

@@ -15,14 +15,16 @@
     }
 
     function clearPreview() {
-        previewBox.hidden = true;
-        previewImage.removeAttribute("src");
+    previewBox.hidden = true;
+    previewImage.removeAttribute("src");
 
-        if (previewUrl !== null) {
-            URL.revokeObjectURL(previewUrl);
-            previewUrl = null;
-        }
+    if (previewUrl !== null) {
+        URL.revokeObjectURL(previewUrl);
+        previewUrl = null;
     }
+
+    form.dispatchEvent(new Event("photo:reset"));
+}
 
     input.addEventListener("change", () => {
         clearPreview();
@@ -80,6 +82,12 @@
             previewUrl = URL.createObjectURL(file);
             previewImage.src = previewUrl;
             previewBox.hidden = false;
+            form.dispatchEvent(
+    new CustomEvent("photo:validated", {
+        detail: { file },
+    })
+);
+
 
             showMessage(
                 "Fotografía cargada. Revisa que los dos números " +
