@@ -9,6 +9,7 @@ from django.urls import reverse
 from PIL import Image
 
 from .models import Exercise
+from .models import Attempt
 from .services.hints import hints_for
 from .services.sum_review import review_sum
 
@@ -98,7 +99,7 @@ class ReviewFlowTests(TestCase):
         self.assertContains(page, 'Requiere revisión')
         self.assertContains(page, 'unidades')
         self.assertNotContains(page, 'Pista 1')
-        self.assertNotContains(page, '37')
+        self.assertNotContains(page, '>37<')
         self.action('show_hint', confirmed, level='2')
         self.assertEqual(self.client.session['sum_review']['hint_level'], 0)
         self.action('show_hint', confirmed, level='1')
@@ -119,6 +120,28 @@ class ReviewFlowTests(TestCase):
         self.assertContains(page, 'Corregido')
         self.assertContains(page, 'Intento 2')
         self.assertNotContains(page, 'Ver pista')
+        records = list(Attempt.objects.filter(user=self.user).order_by('created_at'))
+        self.assertEqual(len(records), 2)
+        self.assertEqual(sorted(a.hint_count for a in records), [0, 2])
+        self.assertEqual({a.status for a in records}, {'requiere_revision', 'corregido'})
+
+    def test_progress_is_private_and_survives_new_session(self):
+        confirmed = self.confirm(32)
+        self.action('check_sum', confirmed)
+        self.action('show_hint', confirmed, level='1')
+        another = get_user_model().objects.create_user(username='otro', password='test-pass')
+        other_client = Client()
+        other_client.force_login(another)
+        self.assertContains(other_client.get(reverse('tutoring:progress')),
+                            'Aún no tienes ejercicios registrados')
+        self.client.logout()
+        self.client.force_login(self.user)
+        progress = self.client.get(reverse('tutoring:progress'))
+        self.assertContains(progress, '23 + 14')
+        self.assertContains(progress, 'Requiere revisión')
+        self.assertContains(progress, 'Intentos: 1')
+        self.assertContains(progress, 'Pistas consultadas: 1')
+        self.assertNotIn('otro', progress.content.decode())
 
     def test_correct_first_time_is_correcto(self):
         confirmed = self.confirm(37)

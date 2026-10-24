@@ -16,6 +16,10 @@
     Ver sumas disponibles
 </a>
 
+<a href="{% url 'tutoring:progress' %}" class="btn btn-outline-primary w-100 mb-3">
+    Ver mi progreso
+</a>
+
 <form method="post" action="{% url 'accounts:logout' %}">
     {% csrf_token %}
     <button type="submit" class="btn btn-outline-primary">

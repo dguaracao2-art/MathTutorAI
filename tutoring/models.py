@@ -42,3 +42,25 @@ class Exercise(models.Model):
 
     def __str__(self):
         return f"{self.operand_a} + {self.operand_b}"
+
+
+class Attempt(models.Model):
+    """Revisión confirmada. No almacena fotografías ni una respuesta inferida por OCR."""
+    user = models.ForeignKey('accounts.User', on_delete=models.CASCADE, related_name='sum_attempts')
+    exercise = models.ForeignKey(Exercise, on_delete=models.PROTECT, related_name='attempts')
+    confirmation_id = models.CharField(max_length=32, unique=True)
+    operand_a = models.PositiveSmallIntegerField()
+    operand_b = models.PositiveSmallIntegerField()
+    written_result = models.PositiveSmallIntegerField()
+    status = models.CharField(max_length=20, choices=[
+        ('correcto', 'Correcto'), ('corregido', 'Corregido'),
+        ('requiere_revision', 'Requiere revisión'),
+    ])
+    hint_count = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+
+    def __str__(self):
+        return f'{self.user_id}: {self.operand_a} + {self.operand_b} = {self.written_result}'

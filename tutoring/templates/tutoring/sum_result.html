@@ -39,5 +39,6 @@
 </section>
 {% endif %}
 <div class="d-flex gap-2 flex-wrap mt-4"><a href="{% url 'tutoring:exercise_list' %}" class="btn btn-outline-primary">Elegir otra suma</a>
+    <a href="{% url 'tutoring:progress' %}" class="btn btn-outline-primary">Ver mi progreso</a>
     <form method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}<button type="submit" class="btn btn-outline-secondary">Cerrar sesión</button></form></div>
 {% endblock %}

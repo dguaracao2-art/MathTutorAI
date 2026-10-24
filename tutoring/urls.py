@@ -26,5 +26,6 @@ urlpatterns = [
     path("resultado/", review_views.review_result, name="review_result"),
     path("pista/", review_views.show_hint, name="show_hint"),
     path("reintentar/", review_views.retry_sum, name="retry_sum"),
+    path("progreso/", review_views.progress, name="progress"),
         
 ]
