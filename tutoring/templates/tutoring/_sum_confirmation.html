@@ -2,8 +2,8 @@
     <h3 class="h5">Confirma los números de tu foto</h3>
 
     <p class="text-secondary">
-        Revisa la fotografía y escribe los dos números
-        y el resultado que aparece en tu hoja.
+        Compara estos números con tu fotografía. Corrige cualquier lectura
+        equivocada y completa los campos vacíos con lo que escribiste en la hoja.
     </p>
 
     <form id="confirmation-form"
@@ -11,6 +11,7 @@
           enctype="multipart/form-data"
           action="{% url 'tutoring:confirm_sum' %}">
         {% csrf_token %}
+        <input type="hidden" name="reading_token" value="">
 
         <input type="hidden"
                name="exercise_id"
