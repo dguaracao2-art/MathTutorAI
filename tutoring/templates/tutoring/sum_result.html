@@ -1,0 +1,44 @@
+{% extends "accounts/base.html" %}
+{% block title %}Revisión de tu suma | MathTutor AI{% endblock %}
+{% block content %}
+<h2 class="h4">Revisión de tu suma</h2>
+<p class="text-secondary">Comprobamos los números que confirmaste. Intento {{ attempt_count }} de esta práctica.</p>
+{% for message in messages %}<div class="alert alert-info" role="status">{{ message }}</div>{% endfor %}
+{% if review.status == 'correcto' %}
+<div class="alert alert-success" role="status"><h3 class="h5">{% if corrected %}Corregido{% else %}Correcto{% endif %}</h3>
+    <p class="mb-0">El resultado que confirmaste coincide con la suma. Puedes practicar otro ejercicio.</p></div>
+{% else %}
+<div class="alert alert-warning" role="status"><h3 class="h5">Requiere revisión</h3>
+    <p class="mb-0">Al revisar de derecha a izquierda, la primera diferencia aparece en la columna de las <strong>{{ review.column_name }}</strong>.</p></div>
+{% endif %}
+<div class="table-responsive"><table class="table text-center align-middle">
+    <caption>Transcripción confirmada, ordenada por columnas.</caption>
+    <thead><tr><th scope="col"><span class="visually-hidden">Fila</span></th>
+        {% for column in review.columns %}<th scope="col" {% if column.needs_review %}class="table-warning"{% endif %}><abbr title="{{ column.name }}">{{ column.label }}</abbr></th>{% endfor %}
+    </tr></thead>
+    <tbody class="font-monospace fs-4">
+        <tr><th scope="row"><span class="visually-hidden">Primer número</span></th>{% for column in review.columns %}<td>{{ column.operand_a }}</td>{% endfor %}</tr>
+        <tr class="border-bottom border-dark border-2"><th scope="row">+</th>{% for column in review.columns %}<td>{{ column.operand_b }}</td>{% endfor %}</tr>
+        <tr><th scope="row"><span class="visually-hidden">Tu resultado</span></th>{% for column in review.columns %}<td {% if column.needs_review %}class="table-warning fw-bold"{% endif %}>{{ column.written_result }}{% if column.needs_review %}<span class="d-block small fs-6">Revisa</span>{% endif %}</td>{% endfor %}</tr>
+    </tbody>
+</table></div>
+{% if review.status == 'requiere_revision' %}
+<section aria-labelledby="tutoring-title" class="mt-4"><h3 id="tutoring-title" class="h5">Tutoría paso a paso</h3>
+    <p class="text-secondary">Usa las pistas para revisar tu hoja y vuelve a intentarlo.</p>
+    {% for hint in hints %}<div class="alert alert-info"><h4 class="h6">Pista {{ forloop.counter }}</h4><p class="mb-0">{{ hint }}</p></div>{% endfor %}
+    {% if next_hint %}<form method="post" action="{% url 'tutoring:show_hint' %}" class="mb-3">
+        {% csrf_token %}<input type="hidden" name="exercise_id" value="{{ exercise.pk }}">
+        <input type="hidden" name="confirmation_id" value="{{ confirmed.confirmation_id }}">
+        <input type="hidden" name="level" value="{{ next_hint }}">
+        <button type="submit" class="btn btn-outline-primary w-100">Ver pista {{ next_hint }}</button></form>
+    {% else %}<p class="text-secondary">Ya consultaste las dos pistas. Corrige tu hoja; si lo necesitas, pide ayuda a tu docente.</p>{% endif %}
+    <form method="post" action="{% url 'tutoring:retry_sum' %}">
+        {% csrf_token %}<input type="hidden" name="exercise_id" value="{{ exercise.pk }}">
+        <input type="hidden" name="confirmation_id" value="{{ confirmed.confirmation_id }}">
+        <button type="submit" class="btn btn-primary w-100">Capturar mi corrección</button></form>
+</section>
+{% endif %}
+<div class="d-flex gap-2 flex-wrap mt-4"><a href="{% url 'tutoring:exercise_list' %}" class="btn btn-outline-primary">Elegir otra suma</a>
+    <a href="{% url 'tutoring:progress' %}" class="btn btn-outline-primary">Ver mi progreso</a>
+    <form method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}<button type="submit" class="btn btn-outline-secondary">Cerrar sesión</button></form></div>
+{% endblock %}

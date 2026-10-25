@@ -1,0 +1,9 @@
+<section id="review-action-box" class="mt-4" {% if not confirmed %}hidden{% endif %}>
+    <p class="text-secondary">Tu lectura está confirmada. Ahora puedes comprobar la suma.</p>
+    <form id="review-action-form" method="post" action="{% url 'tutoring:check_sum' %}">
+        {% csrf_token %}
+        <input type="hidden" name="exercise_id" value="{{ exercise.pk }}">
+        <input type="hidden" name="confirmation_id" value="{{ confirmed.confirmation_id|default:'' }}">
+        <button type="submit" class="btn btn-success w-100">Comprobar mi suma</button>
+    </form>
+</section>
