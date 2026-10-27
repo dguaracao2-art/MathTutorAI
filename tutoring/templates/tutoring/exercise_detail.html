@@ -81,10 +81,12 @@
            name="exercise_id"
            value="{{ exercise.pk }}">
 
-    <div class="mb-3">
+    <div id="photo-drop-zone" class="border border-2 rounded p-3 mb-3">
         <label for="id_photo" class="form-label">
             Selecciona tu fotografía
         </label>
+
+        <p class="text-secondary small mb-2">O arrastra aquí un archivo JPG o PNG.</p>
 
         <input type="file"
                name="photo"
@@ -133,7 +135,7 @@
     </form>
 </div>
 
-<script src="{% static 'tutoring/photo_upload.js' %}?v=lectura1" defer></script>
+<script src="{% static 'tutoring/photo_upload.js' %}?v=lectura2" defer></script>
 <script src="{% static 'tutoring/camera_capture.js' %}" defer></script>
 <script src="{% static 'tutoring/sum_confirmation.js' %}?v=tutoria1" defer></script>
 {% endblock %}

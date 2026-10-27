@@ -5,6 +5,7 @@
     const message = document.getElementById("photo-message");
     const previewBox = document.getElementById("photo-preview-box");
     const previewImage = document.getElementById("photo-preview");
+    const dropZone = document.getElementById("photo-drop-zone");
     if (!form || !input || !button) return;
 
     let previewUrl = null;
@@ -41,6 +42,35 @@
     }
 
     input.addEventListener("change", resetPhoto);
+    if (dropZone) {
+        dropZone.addEventListener("dragover", (event) => {
+            if (input.disabled || !event.dataTransfer.types.includes("Files")) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "copy";
+            dropZone.classList.add("border-primary", "bg-light");
+        });
+        dropZone.addEventListener("dragleave", (event) => {
+            if (!dropZone.contains(event.relatedTarget)) {
+                dropZone.classList.remove("border-primary", "bg-light");
+            }
+        });
+        dropZone.addEventListener("drop", (event) => {
+            event.preventDefault();
+            dropZone.classList.remove("border-primary", "bg-light");
+            if (input.disabled) return;
+            const file = event.dataTransfer.files[0];
+            if (!file) return;
+            try {
+                const transfer = new DataTransfer();
+                transfer.items.add(file);
+                input.files = transfer.files;
+                input.dispatchEvent(new Event("change", { bubbles: true }));
+                form.requestSubmit();
+            } catch {
+                showMessage("No se pudo adjuntar el archivo. Selecciónalo con el botón.", "danger");
+            }
+        });
+    }
     window.addEventListener("pagehide", resetPhoto);
     form.addEventListener("confirmation:busy", (event) => {
         confirming = event.detail.busy;

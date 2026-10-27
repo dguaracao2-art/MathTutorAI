@@ -57,8 +57,6 @@ def agrupar_componentes(componentes, distancia):
 
 def preparar_suma(fotografia):
     """Separar filas desde una ruta o un archivo abierto, sin guardar imágenes."""
-    import cv2
-    import numpy as np
     from PIL import Image, ImageOps
 
     if isinstance(fotografia, (str, os.PathLike)):
@@ -82,28 +80,56 @@ def preparar_suma(fotografia):
     except (OSError, Image.DecompressionBombError) as exc:
         raise PhotoNotReadable('La fotografía está dañada o no se puede leer.') from exc
     imagen.thumbnail((1600, 1600), Image.Resampling.LANCZOS)
+    try:
+        return _separar_suma(imagen, 35, 15, 190)
+    except PhotoNotReadable:
+        # La máscara débil localiza la tinta tenue; el OCR conserva el original.
+        return _separar_suma(imagen, 15, 8, 220, recortar=True)
+
+
+def _separar_suma(imagen, contraste_rojo, contraste_verde, rojo_maximo, recortar=False):
+    import cv2
+    import numpy as np
+    from PIL import Image
+
     rgb = np.asarray(imagen, dtype=np.int16)
-    azul = ((rgb[:, :, 2] - rgb[:, :, 0] > 35)
-            & (rgb[:, :, 2] - rgb[:, :, 1] > 15)
-            & (rgb[:, :, 0] < 190))
+    azul = ((rgb[:, :, 2] - rgb[:, :, 0] > contraste_rojo)
+            & (rgb[:, :, 2] - rgb[:, :, 1] > contraste_verde)
+            & (rgb[:, :, 0] < rojo_maximo))
     mask = quitar_ruido(np.uint8(azul) * 255)
-    ys, xs = np.where(mask)
-    if len(xs) < 100:
+    if np.count_nonzero(mask) < 100:
         raise PhotoNotReadable('No hay suficiente tinta azul legible para este ensayo.')
-    alto_tinta = int(ys.max() - ys.min() + 1)
     lineas = cv2.HoughLinesP(mask, 1, np.pi / 180, threshold=25,
-                             minLineLength=max(40, int(alto_tinta * .25)),
+                             minLineLength=max(30, int(min(mask.shape) * .035)),
                              maxLineGap=10)
     candidatas = []
     if lineas is not None:
         for x1, y1, x2, y2 in np.asarray(lineas).reshape(-1, 4):
             dx, dy = int(x2 - x1), int(y2 - y1)
             if dx and abs(dy / dx) <= math.tan(math.radians(12)):
-                candidatas.append((dx * dx + dy * dy, math.degrees(math.atan(dy / dx))))
+                candidatas.append((dx * dx + dy * dy, math.degrees(math.atan(dy / dx)),
+                                   (int(x1), int(y1), int(x2), int(y2))))
     if not candidatas:
         raise PhotoNotReadable('No pude localizar una línea de suma suficientemente clara.')
-    angulo = max(candidatas)[1]
+    largo_cuadrado, angulo, linea = max(candidatas)
     alto, ancho = mask.shape
+    if recortar:
+        longitud = math.sqrt(largo_cuadrado)
+        x1, y1, x2, y2 = linea
+        xmin = max(0, int(min(x1, x2) - .65 * longitud))
+        xmax = min(ancho, int(max(x1, x2) + .5 * longitud))
+        ymin = max(0, int(min(y1, y2) - 2.25 * longitud))
+        ymax = min(alto, int(max(y1, y2) + .8 * longitud))
+        tinta_tenue = ((rgb[:, :, 2] - rgb[:, :, 0] > 15)
+                      & (rgb[:, :, 2] - rgb[:, :, 1] > 8)
+                      & (rgb[:, :, 0] < 220))
+        if tinta_tenue[ymin:ymax, xmin:xmax].mean() > .12:
+            tinta_tenue = ((rgb[:, :, 2] - rgb[:, :, 0] > 20)
+                          & (rgb[:, :, 2] - rgb[:, :, 1] > 8)
+                          & (rgb[:, :, 0] < 220))
+        zona = np.zeros_like(mask)
+        zona[ymin:ymax, xmin:xmax] = np.uint8(tinta_tenue[ymin:ymax, xmin:xmax]) * 255
+        mask = quitar_ruido(zona)
     matriz = cv2.getRotationMatrix2D((ancho / 2, alto / 2), angulo, 1)
     mask = cv2.warpAffine(mask, matriz, (ancho, alto), flags=cv2.INTER_NEAREST)
     mask = quitar_ruido(mask)
@@ -117,14 +143,16 @@ def preparar_suma(fotografia):
         inicio -= 1
     while fin < alto and proyeccion[fin] >= umbral:
         fin += 1
-
     # Localizar una cruz aislada a la izquierda de la segunda fila.
     _, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
     superior = int(np.where(mask)[0].min())
     corte_superior = superior + (inicio - superior) * .25
     signos = []
     for indice, (x, y, w, h, area) in enumerate(stats[1:], 1):
-        if area < 30 or y <= corte_superior or y + h > inicio + 2:
+        margen_linea = max(20, int(.06 * longitud)) if recortar else 2
+        if area < 30 or y <= corte_superior or y + h > inicio + margen_linea:
+            continue
+        if recortar and x >= min(linea[0], linea[2]):
             continue
         if not .4 <= w / h <= 1.8:
             continue
@@ -138,22 +166,36 @@ def preparar_suma(fotografia):
     if not signos:
         raise PhotoNotReadable('No pude aislar el signo +. Usa una sola suma vertical clara.')
     indice_signo = min(signos)[1]
+    altura_signo = int(stats[indice_signo, cv2.CC_STAT_HEIGHT])
     mask[labels == indice_signo] = 0
+    if recortar:
+        trazos_horizontales = cv2.morphologyEx(
+            mask, cv2.MORPH_OPEN,
+            np.ones((1, max(40, int(longitud * .3))), dtype=np.uint8),
+        )
+        mask[trazos_horizontales > 0] = 0
     mask[inicio:fin] = 0
     mask = quitar_ruido(mask, area_minima=12)
     _, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
     componentes = [(i, *map(int, s)) for i, s in enumerate(stats[1:], 1)]
     if not componentes:
         raise PhotoNotReadable('No quedan trazos legibles después de separar la línea.')
-    altura_mediana = float(np.median([c[4] for c in componentes]))
-    componentes = [c for c in componentes if c[4] >= max(8, .3 * altura_mediana)]
-    distancia = max(8, .6 * altura_mediana)
+    if recortar:
+        trazos_principales = [c[4] for c in componentes if c[4] >= longitud * .1]
+        if not trazos_principales:
+            raise PhotoNotReadable('No hay dígitos legibles junto a la línea.')
+        altura_mediana = float(np.median(trazos_principales))
+        componentes = [c for c in componentes if c[4] >= max(8, .18 * altura_mediana)]
+    else:
+        altura_mediana = float(np.median([c[4] for c in componentes]))
+        componentes = [c for c in componentes if c[4] >= max(8, .3 * altura_mediana)]
+    distancia = max(8, .9 * altura_signo, (.95 if recortar else .6) * altura_mediana)
     arriba = agrupar_componentes([c for c in componentes if c[2] + c[4] <= inicio], distancia)
     abajo = agrupar_componentes([c for c in componentes if c[2] >= fin], distancia)
     if len(arriba) != 2 or len(abajo) != 1:
         raise PhotoNotReadable('No pude separar dos operandos y un resultado. Revisa la fotografía.')
 
-    recortes, cajas = {}, {}
+    cajas = {}
     ids_validos = [c[0] for grupo in arriba + abajo for c in grupo]
     mask = np.uint8(np.isin(labels, ids_validos)) * 255
     for nombre, grupo in zip(('operando_a', 'operando_b', 'resultado'), arriba + abajo):
@@ -161,12 +203,46 @@ def preparar_suma(fotografia):
         y1 = min(c[2] for c in grupo)
         x2 = max(c[1] + c[3] for c in grupo)
         y2 = max(c[2] + c[4] for c in grupo)
-        caja = (x1, y1, x2, y2)
-        seleccion = np.isin(labels[y1:y2, x1:x2], [c[0] for c in grupo])
-        recorte = Image.fromarray(np.where(seleccion, 0, 255).astype(np.uint8)).convert('RGB')
-        recortes[nombre] = ImageOps.expand(recorte, border=15, fill='white')
-        cajas[nombre] = list(caja)
+        if y2 - y1 < .4 * altura_signo:
+            raise PhotoNotReadable('No hay suficientes trazos para leer una fila completa.')
+        cajas[nombre] = [x1, y1, x2, y2]
+    if recortar:
+        recortes, cajas = _recortes_con_contraste(imagen, cajas)
+    else:
+        # Con tinta bien aislada, quitar también la cuadrícula del cuaderno.
+        from PIL import ImageOps
+        recortes = {}
+        for nombre, (x1, y1, x2, y2) in cajas.items():
+            recorte = Image.fromarray(255 - mask[y1:y2, x1:x2])
+            recortes[nombre] = ImageOps.expand(recorte, border=15, fill='white').convert('RGB')
     return imagen, Image.fromarray(255 - mask), recortes, cajas, angulo
+
+
+def _recortes_con_contraste(imagen, cajas):
+    """Conservar trazos tenues que la máscara puede perder al segmentar."""
+    from PIL import ImageOps
+
+    alturas = sorted(caja[3] - caja[1] for caja in cajas.values())
+    margen = max(4, round(.3 * alturas[len(alturas) // 2]))
+    separacion = (cajas['operando_a'][3] + cajas['operando_b'][1]) // 2
+    recortes, ampliadas = {}, {}
+    for nombre in RECORTES:
+        x1, y1, x2, y2 = cajas[nombre]
+        superior = max(0, y1 - margen)
+        inferior = min(imagen.height, y2 + margen)
+        if nombre == 'operando_a':
+            inferior = min(inferior, separacion)
+        elif nombre == 'operando_b':
+            superior = max(superior, separacion)
+            inferior = y2  # No incluir la línea de suma.
+        else:
+            superior = y1
+        caja = [max(0, x1 - margen), superior,
+                min(imagen.width, x2 + margen), inferior]
+        recorte = ImageOps.autocontrast(imagen.crop(caja).convert('L'), cutoff=2)
+        recortes[nombre] = ImageOps.expand(recorte, border=15, fill='white').convert('RGB')
+        ampliadas[nombre] = caja
+    return recortes, ampliadas
 
 
 @lru_cache(maxsize=1)
@@ -182,6 +258,13 @@ def cargar_modelo(modelo=MODELO, local_files_only=False):
     reconocedor = VisionEncoderDecoderModel.from_pretrained(
         modelo, weights_only=True, use_safetensors=False, **opciones,
     ).eval()
+    # La tarea transcribe números; nunca recibe la respuesta del ejercicio.
+    permitidos = {indice for token, indice in procesador.tokenizer.get_vocab().items()
+                  if re.fullmatch(r'[▁Ġ0-9]+', token)}
+    permitidos.add(procesador.tokenizer.eos_token_id)
+    reconocedor.generation_config.suppress_tokens = sorted(
+        set(range(reconocedor.config.decoder.vocab_size)) - permitidos
+    )
     return procesador, reconocedor
 
 
@@ -204,12 +287,13 @@ def reconocer_recortes(recortes, modelo=MODELO, *, local_files_only=False,
     try:
         import torch
         procesador, reconocedor = cargar_modelo(modelo, local_files_only)
-        lecturas_crudas = {}
-        for campo, nombre in zip(CAMPOS, RECORTES):
-            valores = procesador(images=recortes[nombre], return_tensors='pt').pixel_values
-            with torch.inference_mode():
-                ids = reconocedor.generate(valores, max_new_tokens=12, num_beams=3)
-            lecturas_crudas[campo] = procesador.batch_decode(ids, skip_special_tokens=True)[0]
+        valores = procesador(images=[recortes[nombre] for nombre in RECORTES],
+                             return_tensors='pt').pixel_values
+        with torch.inference_mode():
+            ids = reconocedor.generate(valores, max_new_tokens=12, num_beams=3)
+        lecturas_crudas = dict(zip(
+            CAMPOS, procesador.batch_decode(ids, skip_special_tokens=True)
+        ))
         propuesta = normalizar_lecturas(lecturas_crudas)
         return {
             'estado': ('pendiente_de_confirmacion'
