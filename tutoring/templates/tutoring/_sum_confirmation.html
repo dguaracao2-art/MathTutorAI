@@ -18,7 +18,7 @@
                value="{{ exercise.pk }}">
 
         {% for field in confirmation_form %}
-            {% if field.name != "photo" %}
+            {% if field.name == "operand_a" or field.name == "operand_b" or field.name == "written_result" %}
                 <div class="mb-3">
                     <label for="{{ field.id_for_label }}"
                            class="form-label">
@@ -28,6 +28,17 @@
                 </div>
             {% endif %}
         {% endfor %}
+
+        <details class="carry-details mb-3">
+            <summary>Llevadas escritas en la hoja (opcional)</summary>
+            <p class="form-text mt-2">Abre esta sección solo si anotaste números pequeños
+                encima de alguna columna. Copia únicamente esas marcas.
+                <strong>Si no hay marcas, deja los tres campos vacíos.</strong>
+                No es necesario escribir 1 en cada casilla.</p>
+            <div class="mb-3"><label class="form-label" for="{{ confirmation_form.carry_tens.id_for_label }}">{{ confirmation_form.carry_tens.label }}</label>{{ confirmation_form.carry_tens }}</div>
+            <div class="mb-3"><label class="form-label" for="{{ confirmation_form.carry_hundreds.id_for_label }}">{{ confirmation_form.carry_hundreds.label }}</label>{{ confirmation_form.carry_hundreds }}</div>
+            <div class="mb-3"><label class="form-label" for="{{ confirmation_form.carry_thousands.id_for_label }}">{{ confirmation_form.carry_thousands.label }}</label>{{ confirmation_form.carry_thousands }}</div>
+        </details>
 
         <button type="submit"
                 id="confirm-button"

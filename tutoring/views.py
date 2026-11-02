@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import re
 import uuid
 
 from django.conf import settings
@@ -7,6 +8,8 @@ from django.contrib import messages
 from django.contrib.auth import SESSION_KEY
 from django.contrib.auth.decorators import login_required
 from django.core import signing
+from django.core.paginator import Paginator
+from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.cache import never_cache
@@ -78,8 +81,21 @@ def _receipt_context(request, exercise, photo):
 @never_cache
 @login_required
 def exercise_list(request):
+    exercises = Exercise.objects.filter(is_active=True)
+    query = request.GET.get('q', '').strip()[:40]
+    search_error = ''
+    if query:
+        pair = re.fullmatch(r'([0-9]{1,3})\s*\+\s*([0-9]{1,3})', query)
+        if pair:
+            exercises = exercises.filter(operand_a=int(pair[1]), operand_b=int(pair[2]))
+        elif re.fullmatch(r'[0-9]{1,3}', query):
+            exercises = exercises.filter(Q(operand_a=int(query)) | Q(operand_b=int(query)))
+        else:
+            exercises = exercises.none()
+            search_error = 'Busca un número de 0 a 999 o una suma, por ejemplo: 358 + 167.'
+    page = Paginator(exercises, 10).get_page(request.GET.get('page'))
     return render(request, 'tutoring/exercise_list.html', {
-        'exercises': Exercise.objects.filter(is_active=True),
+        'exercises': page, 'page_obj': page, 'query': query, 'search_error': search_error,
     })
 
 
@@ -196,20 +212,34 @@ def confirm_sum(request):
             'Vuelve a cargar la foto y revisa los números.'
         )}, status=409)
 
-    for name in ('operand_a', 'operand_b'):
-        if form.cleaned_data[name] != getattr(exercise, name):
-            form.add_error(name, 'No coincide con la suma elegida. Revisa la foto y este número.')
-    if form.errors:
-        errors = [f'{form.fields[name].label}: {error}'
-                  for name, field_errors in form.errors.items() for error in field_errors]
-        return JsonResponse({'error': ' '.join(errors)}, status=400)
+    different = [form.fields[name].label.lower() for name in ('operand_a', 'operand_b')
+                 if form.cleaned_data[name] != getattr(exercise, name)]
+    if different:
+        return JsonResponse({'error': (
+            f'No coincide con la suma elegida: {exercise.operand_a} + {exercise.operand_b}. '
+            f'Revisa en tu foto: {" y ".join(different)}. '
+            'Corrige únicamente las lecturas que sean distintas de tu hoja. '
+            'Si escribiste otra suma, pulsa Elegir otra suma y copia uno de los '
+            'ejercicios del banco en tu hoja.'
+        )}, status=400)
 
     values = {name: form.cleaned_data[name]
               for name in ('operand_a', 'operand_b', 'written_result')}
+    carry_fields = ('carry_tens', 'carry_hundreds', 'carry_thousands')
+    carry_values = {name: form.cleaned_data[name] for name in carry_fields}
+    carries = {column: carry_values[name] for column, name in zip(
+        ('decenas', 'centenas', 'unidades de millar'), carry_fields
+    ) if carry_values[name] is not None}
+    if all(value is None for value in receipt['proposal'].values()):
+        source = 'manual_confirmed'
+    else:
+        source = 'ocr_confirmed' if values == receipt['proposal'] else 'ocr_edited'
     confirmed = {
+        'carries': carries, **carry_values,
+        'carry_source': 'manual_confirmed',
         'confirmation_id': uuid.uuid4().hex,
         'exercise_id': exercise.pk, **values,
-        'source': 'ocr_confirmed' if values == receipt['proposal'] else 'ocr_edited',
+        'source': source,
         'recognizer': receipt['source'], 'original_proposal': receipt['proposal'],
     }
     request.session['confirmed_sum'] = confirmed

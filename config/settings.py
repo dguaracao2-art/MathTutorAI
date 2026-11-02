@@ -24,7 +24,18 @@ SECRET_KEY = config("SECRET_KEY")
 
 DEBUG = config("DEBUG", default=False, cast=bool)
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [host.strip() for host in config(
+    "ALLOWED_HOSTS", default="localhost,127.0.0.1,[::1]"
+).split(",") if host.strip()]
+CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in config(
+    "CSRF_TRUSTED_ORIGINS", default=""
+).split(",") if origin.strip()]
+# En producción deben activarse detrás de una conexión HTTPS real.
+SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=not DEBUG, cast=bool)
+SESSION_COOKIE_SECURE = config("SESSION_COOKIE_SECURE", default=not DEBUG, cast=bool)
+CSRF_COOKIE_SECURE = config("CSRF_COOKIE_SECURE", default=not DEBUG, cast=bool)
+SECURE_CONTENT_TYPE_NOSNIFF = True
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 
 # Application definition
@@ -103,9 +114,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'es'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'America/Guayaquil'
 
 USE_I18N = True
 

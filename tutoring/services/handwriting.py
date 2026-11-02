@@ -72,10 +72,12 @@ def preparar_suma(fotografia):
         raise PhotoNotReadable('La fotografía supera los 5 MB.')
     try:
         with Image.open(BytesIO(contenido)) as archivo:
-            if archivo.format not in ('JPEG', 'PNG'):
+            if archivo.format not in ('JPEG', 'PNG', 'MPO'):
                 raise PhotoNotReadable('Selecciona una imagen JPG o PNG.')
             if archivo.width * archivo.height > 20_000_000:
                 raise PhotoNotReadable('La fotografía supera los 20 megapíxeles.')
+            # JPEG de cámara con imagen auxiliar: usar solo la imagen principal.
+            archivo.seek(0)
             imagen = ImageOps.exif_transpose(archivo).convert('RGB')
     except (OSError, Image.DecompressionBombError) as exc:
         raise PhotoNotReadable('La fotografía está dañada o no se puede leer.') from exc
@@ -84,10 +86,16 @@ def preparar_suma(fotografia):
         return _separar_suma(imagen, 35, 15, 190)
     except PhotoNotReadable:
         # La máscara débil localiza la tinta tenue; el OCR conserva el original.
-        return _separar_suma(imagen, 15, 8, 220, recortar=True)
+        try:
+            return _separar_suma(imagen, 15, 8, 220, recortar=True)
+        except PhotoNotReadable:
+            # El papel azulado puede cumplir el criterio de color de la tinta.
+            # Otsu exige además un trazo oscuro; no usa valores del ejercicio.
+            return _separar_suma(imagen, 15, 8, 220, limpiar_fondo=True)
 
 
-def _separar_suma(imagen, contraste_rojo, contraste_verde, rojo_maximo, recortar=False):
+def _separar_suma(imagen, contraste_rojo, contraste_verde, rojo_maximo,
+                  recortar=False, limpiar_fondo=False):
     import cv2
     import numpy as np
     from PIL import Image
@@ -96,6 +104,10 @@ def _separar_suma(imagen, contraste_rojo, contraste_verde, rojo_maximo, recortar
     azul = ((rgb[:, :, 2] - rgb[:, :, 0] > contraste_rojo)
             & (rgb[:, :, 2] - rgb[:, :, 1] > contraste_verde)
             & (rgb[:, :, 0] < rojo_maximo))
+    if limpiar_fondo:
+        gris = cv2.cvtColor(np.asarray(imagen), cv2.COLOR_RGB2GRAY)
+        umbral, _ = cv2.threshold(gris, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        azul &= gris <= umbral
     mask = quitar_ruido(np.uint8(azul) * 255)
     if np.count_nonzero(mask) < 100:
         raise PhotoNotReadable('No hay suficiente tinta azul legible para este ensayo.')
@@ -213,9 +225,31 @@ def _separar_suma(imagen, contraste_rojo, contraste_verde, rojo_maximo, recortar
         from PIL import ImageOps
         recortes = {}
         for nombre, (x1, y1, x2, y2) in cajas.items():
-            recorte = Image.fromarray(255 - mask[y1:y2, x1:x2])
+            limpio = _limpiar_fila_binaria(mask[y1:y2, x1:x2])
+            recorte = Image.fromarray(255 - limpio)
             recortes[nombre] = ImageOps.expand(recorte, border=15, fill='white').convert('RGB')
     return imagen, Image.fromarray(255 - mask), recortes, cajas, angulo
+
+
+def _limpiar_fila_binaria(mask):
+    """Quitar fragmentos aislados pequeños sin alterar componentes conservados."""
+    import cv2
+    import numpy as np
+
+    limpio = mask.copy()
+    _, labels, stats, _ = cv2.connectedComponentsWithStats(limpio, connectivity=8)
+    if len(stats) <= 1:
+        return mask
+    altura = max(stats[1:, cv2.CC_STAT_HEIGHT])
+    area = max(stats[1:, cv2.CC_STAT_AREA])
+    conservar = ((stats[:, cv2.CC_STAT_HEIGHT] >= .2 * altura)
+                 | (stats[:, cv2.CC_STAT_AREA] >= .5 * area))
+    conservar[0] = False
+    limpio = np.uint8(conservar[labels]) * 255
+    ys, xs = np.where(limpio)
+    if not len(xs):
+        return mask
+    return limpio[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
 
 
 def _recortes_con_contraste(imagen, cajas):
@@ -239,10 +273,26 @@ def _recortes_con_contraste(imagen, cajas):
             superior = y1
         caja = [max(0, x1 - margen), superior,
                 min(imagen.width, x2 + margen), inferior]
-        recorte = ImageOps.autocontrast(imagen.crop(caja).convert('L'), cutoff=2)
+        recorte = _normalizar_iluminacion_fila(imagen.crop(caja))
         recortes[nombre] = ImageOps.expand(recorte, border=15, fill='white').convert('RGB')
         ampliadas[nombre] = caja
     return recortes, ampliadas
+
+
+def _normalizar_iluminacion_fila(recorte):
+    """Uniformar el papel de una fila tenue conservando sus trazos originales."""
+    import cv2
+    import numpy as np
+    from PIL import Image
+
+    gris = np.asarray(recorte.convert('L'))
+    # El cierre estima el fondo local alrededor de los trazos oscuros.
+    # Dividir por él reduce sombras suaves; el autocontraste global anterior
+    # también oscurecía la cuadrícula. Esta ruta solo se usa tras aislar filas
+    # con tinta tenue, sin recibir números ni resultados del ejercicio.
+    fondo = cv2.morphologyEx(gris, cv2.MORPH_CLOSE, np.ones((31, 31), np.uint8))
+    normalizada = cv2.divide(gris, np.maximum(fondo, 1), scale=255)
+    return Image.fromarray(normalizada)
 
 
 @lru_cache(maxsize=1)
@@ -309,13 +359,14 @@ def reconocer_recortes(recortes, modelo=MODELO, *, local_files_only=False,
         _inference_lock.release()
 
 
-def leer_fotografia(fotografia, modelo=MODELO):
+def leer_fotografia(fotografia, modelo=MODELO, *, incluir_diagnostico=False):
     """Usar únicamente el modelo ya descargado; la web no inicia descargas."""
     try:
         _, _, recortes, _, _ = preparar_suma(fotografia)
     except PhotoNotReadable as exc:
         return {
             'estado': 'lectura_pendiente',
+            'etapa': 'separacion',
             'source': 'trocr-small-handwritten',
             'propuesta': dict.fromkeys(CAMPOS),
             'can_confirm': False,
@@ -325,14 +376,17 @@ def leer_fotografia(fotografia, modelo=MODELO):
         raise ReaderUnavailable('Faltan las dependencias de preparación de imágenes.') from exc
 
     lectura = reconocer_recortes(recortes, modelo, local_files_only=True, esperar=False)
-    lectura.pop('lecturas_crudas')
-    lectura['can_confirm'] = any(v is not None for v in lectura['propuesta'].values())
+    if not incluir_diagnostico:
+        lectura.pop('lecturas_crudas')
+    lectura['etapa'] = 'reconocimiento'
+    # La geometría ya se validó; permitir completar incluso tres campos vacíos.
+    lectura['can_confirm'] = True
     if lectura['estado'] == 'pendiente_de_confirmacion':
         lectura['mensaje'] = 'Lectura lista. Revisa los tres números con tu fotografía y confírmalos.'
-    elif lectura['can_confirm']:
+    elif any(v is not None for v in lectura['propuesta'].values()):
         lectura['mensaje'] = ('Lectura incompleta. Revisa los números propuestos y completa '
                               'los campos vacíos con lo que aparece en tu fotografía.')
     else:
-        lectura['mensaje'] = ('Lectura pendiente. No pude leer los números. '
-                              'Toma una fotografía más clara y vuelve a cargarla.')
+        lectura['mensaje'] = ('No pude proponer los números. Mira tu fotografía y completa '
+                              'los tres campos antes de confirmar, o toma otra foto.')
     return lectura

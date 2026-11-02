@@ -1,0 +1,111 @@
+/* Ajustes sobrios sobre Bootstrap; conservar centrado y medios contenidos. */
+* { box-sizing: border-box; }
+body.bg-light {
+    margin: 0;
+    background: #f5f7fb !important;
+    color: #24324b;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    min-height: 100vh;
+    line-height: 1.55;
+}
+main.container {
+    width: 100%;
+    max-width: 1040px;
+    margin-inline: auto;
+    padding: 40px 16px !important;
+}
+.app-shell {
+    width: 100%;
+    max-width: 480px;
+    margin-inline: auto;
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 8px 28px #1e3a8a0a !important;
+    overflow-wrap: break-word;
+}
+.app-shell > .card-body { padding: 24px !important; min-width: 0; }
+h1, h2, h3 { color: #172554; }
+.text-primary { color: #1d4ed8 !important; }
+.text-secondary, .form-text { color: #545454 !important; }
+.btn { min-height: 44px; border-radius: 8px; font-weight: 600; white-space: normal; }
+.btn-primary {
+    --bs-btn-bg: #1d4ed8;
+    --bs-btn-border-color: #1d4ed8;
+    --bs-btn-hover-bg: #1e40af;
+    --bs-btn-hover-border-color: #1e40af;
+    --bs-btn-active-bg: #1e3a8a;
+    --bs-btn-active-border-color: #1e3a8a;
+}
+.btn-outline-primary {
+    --bs-btn-color: #1d4ed8;
+    --bs-btn-border-color: #1d4ed8;
+    --bs-btn-hover-bg: #1d4ed8;
+    --bs-btn-hover-border-color: #1d4ed8;
+    --bs-btn-active-bg: #1e40af;
+    --bs-btn-active-border-color: #1e40af;
+}
+.form-control { border-radius: 8px; min-height: 44px; font-size: 1rem; max-width: 100%; }
+.form-label { display: block; font-weight: 600; }
+.alert { border-radius: 10px; }
+.alert-warning { --bs-alert-bg: #fff7ed; --bs-alert-color: #7c2d12; }
+.alert-danger { --bs-alert-bg: #fee2e2; --bs-alert-color: #7f1d1d; --bs-alert-border-color: #fecaca; }
+.alert-success { --bs-alert-bg: #dcece7; --bs-alert-color: #14532d; }
+.alert-info { --bs-alert-bg: #eff6ff; --bs-alert-color: #1e3a8a; }
+.hint-card { --bs-alert-bg: #fff7ed; --bs-alert-color: #545454; --bs-alert-border-color: #fed7aa; }
+#photo-drop-zone { border-style: dashed !important; background: #f8faff; border-color: #cbd5e1 !important; }
+#camera-box, #camera-box > div, .table-responsive { max-width: 100%; min-width: 0; }
+#camera-video {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    max-height: 320px;
+    object-fit: contain;
+    background: #172554;
+}
+.camera-frame {
+    position: relative;
+    width: 100%;
+    max-width: 427px;
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    margin-inline: auto;
+    background: #172554;
+}
+.camera-frame #camera-video {
+    position: absolute;
+    inset: 0;
+    height: 100%;
+    max-height: none;
+}
+#camera-guide {
+    position: absolute;
+    left: 20%;
+    top: 8%;
+    width: 60%;
+    height: 84%;
+    border: 3px solid #1d4ed8;
+    box-shadow: 0 0 0 999px #17255466;
+    pointer-events: none;
+}
+#photo-preview {
+    display: block;
+    width: auto;
+    max-width: 100%;
+    height: auto;
+    max-height: 360px;
+    object-fit: contain;
+    margin-inline: auto;
+}
+.sum-columns { width: 100%; max-width: 340px; margin: 24px auto; table-layout: fixed; }
+.sum-columns td { font-variant-numeric: tabular-nums; }
+.sum-columns .review-cell { --bs-table-bg: #fee2e2; --bs-table-color: #24324b; }
+.sum-columns .operand-line { border-bottom: 2px solid #24324b; }
+.sum-columns caption { font-size: .85rem; text-align: center; }
+.carry-details { padding: 12px; border: 1px solid #dbe3ef; border-radius: 8px; }
+summary { cursor: pointer; color: #1d4ed8; font-weight: 600; }
+button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px solid #93c5fd; outline-offset: 3px; }
+@media (max-width: 400px) {
+    main.container { padding: 20px 10px !important; }
+    .app-shell > .card-body { padding: 20px !important; }
+}
