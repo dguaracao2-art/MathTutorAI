@@ -56,6 +56,7 @@ class Attempt(models.Model):
         ('correcto', 'Correcto'), ('corregido', 'Corregido'),
         ('requiere_revision', 'Requiere revisión'),
     ])
+    carries = models.JSONField(default=dict, blank=True)
     hint_count = models.PositiveSmallIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 

@@ -4,6 +4,8 @@
     const closeButton = document.getElementById("close-camera");
     const box = document.getElementById("camera-box");
     const video = document.getElementById("camera-video");
+    const frame = document.getElementById("camera-frame");
+    const guide = document.getElementById("camera-guide");
     const message = document.getElementById("camera-message");
     const form = document.getElementById("photo-form");
     const input = document.getElementById("id_photo");
@@ -91,11 +93,19 @@
 
             if (requestId !== sequence) return;
 
+            // Mantener el marco y el video con la misma proporción: sin
+            // letterboxing, las coordenadas visibles coinciden con la captura.
+            const ratio = video.videoWidth / video.videoHeight;
+            if (!Number.isFinite(ratio) || ratio <= 0) {
+                throw new Error("La cámara aún no entrega una imagen.");
+            }
+            frame.style.aspectRatio = String(ratio);
+            frame.style.maxWidth = (320 * ratio) + "px";
             captureButton.disabled = false;
 
             showMessage(
-                "Coloca una sola suma completa dentro del recuadro " +
-                "y pulsa Capturar foto."
+                "Se capturará solo el interior del marco azul. " +
+                "Acerca la hoja, espera a verla nítida y pulsa Capturar foto."
             );
         } catch (error) {
             if (requestId !== sequence) return;
@@ -133,14 +143,37 @@
             return;
         }
 
+        const visibleVideo = video.getBoundingClientRect();
+        const visibleGuide = guide.getBoundingClientRect();
+        if (!visibleVideo.width || !visibleVideo.height ||
+                !visibleGuide.width || !visibleGuide.height) {
+            showMessage("Espera a que el marco de la cámara esté visible.");
+            return;
+        }
+        // El marco puede cambiar de tamaño en móvil. Usar sus coordenadas
+        // actuales, no la resolución CSS ni números del ejercicio elegido.
+        const sx = Math.max(0, Math.round(
+            (visibleGuide.left - visibleVideo.left) * video.videoWidth / visibleVideo.width
+        ));
+        const sy = Math.max(0, Math.round(
+            (visibleGuide.top - visibleVideo.top) * video.videoHeight / visibleVideo.height
+        ));
+        const sw = Math.min(video.videoWidth - sx, Math.round(
+            visibleGuide.width * video.videoWidth / visibleVideo.width
+        ));
+        const sh = Math.min(video.videoHeight - sy, Math.round(
+            visibleGuide.height * video.videoHeight / visibleVideo.height
+        ));
+        if (sw <= 0 || sh <= 0) {
+            showMessage("No se pudo delimitar la suma. Abre la cámara nuevamente.", "danger");
+            return;
+        }
         const canvas = document.createElement("canvas");
-        const scale = Math.min(
-            1,
-            1920 / Math.max(video.videoWidth, video.videoHeight)
-        );
-
-        canvas.width = Math.round(video.videoWidth * scale);
-        canvas.height = Math.round(video.videoHeight * scale);
+        // PNG evita otra compresión JPEG. Limitar píxeles también limita peso.
+        const scale = Math.min(1, 1920 / Math.max(sw, sh),
+            Math.sqrt(1500000 / (sw * sh)));
+        canvas.width = Math.max(1, Math.round(sw * scale));
+        canvas.height = Math.max(1, Math.round(sh * scale));
 
         const context = canvas.getContext("2d");
 
@@ -149,7 +182,7 @@
             return;
         }
 
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        context.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
 
         const requestId = sequence;
         captureButton.disabled = true;
@@ -167,6 +200,11 @@
                 return;
             }
 
+            if (blob.size > 5 * 1024 * 1024) {
+                showMessage("La captura supera los 5 MB. Selecciona otra fotografía.", "danger");
+                return;
+            }
+
             if (input.disabled) {
                 showMessage(
                     "Espera a que termine la carga actual y captura otra vez."
@@ -177,8 +215,8 @@
             try {
                 const file = new File(
                     [blob],
-                    "captura-suma.jpg",
-                    { type: "image/jpeg" }
+                    "captura-suma.png",
+                    { type: "image/png" }
                 );
 
                 const transfer = new DataTransfer();
@@ -189,8 +227,11 @@
                     new Event("change", { bubbles: true })
                 );
 
-                showMessage("Fotografía tomada.");
-                form.requestSubmit();
+                showMessage(
+                    "Foto tomada. Revisa la vista previa. Si está oscura, cortada " +
+                    "o borrosa, abre la cámara y repítela. Si se ve bien, pulsa " +
+                    "Cargar y leer fotografía."
+                );
             } catch {
                 showMessage(
                     "No se pudo preparar la captura. " +
@@ -198,7 +239,7 @@
                     "danger"
                 );
             }
-        }, "image/jpeg", 0.9);
+        }, "image/png");
     });
 
     closeButton.addEventListener("click", () => {
@@ -206,8 +247,14 @@
         showMessage("Cámara cerrada.");
     });
 
-    input.addEventListener("change", stopCamera);
-    form.addEventListener("submit", stopCamera);
+    input.addEventListener("change", () => {
+        stopCamera();
+        message.hidden = true;
+    });
+    form.addEventListener("submit", () => {
+        stopCamera();
+        message.hidden = true;
+    });
     window.addEventListener("pagehide", stopCamera);
 
     document.addEventListener("visibilitychange", () => {

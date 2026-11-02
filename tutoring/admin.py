@@ -13,6 +13,8 @@ class ExerciseAdmin(admin.ModelAdmin):
         "is_active",
     )
     list_filter = ("is_active",)
+    search_fields = ("operand_a", "operand_b")
+    list_per_page = 25
 
     @admin.display(description="Nivel")
     def level(self, obj):

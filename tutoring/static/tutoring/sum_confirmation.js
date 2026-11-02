@@ -97,7 +97,7 @@
                 showMessage(result.error || "No se pudieron confirmar los números.", "danger");
                 return;
             }
-            fields.forEach((field) => { field.value = result.confirmed[field.name]; });
+            fields.forEach((field) => { field.value = result.confirmed[field.name] ?? ""; });
             showMessage("Lectura confirmada. El resultado escrito es " +
                 result.confirmed.written_result +
                 ". Ya puedes comprobar tu suma.", "info");

@@ -6,26 +6,27 @@
 {% for message in messages %}<div class="alert alert-info" role="status">{{ message }}</div>{% endfor %}
 {% if review.status == 'correcto' %}
 <div class="alert alert-success" role="status"><h3 class="h5">{% if corrected %}Corregido{% else %}Correcto{% endif %}</h3>
-    <p class="mb-0">El resultado que confirmaste coincide con la suma. Puedes practicar otro ejercicio.</p></div>
+    <p class="mb-0">El resultado que confirmaste coincide con la suma.{% if review.carry_count %} Las marcas de llevada confirmadas también coinciden.{% endif %} Puedes practicar otro ejercicio.</p></div>
 {% else %}
-<div class="alert alert-warning" role="status"><h3 class="h5">Requiere revisión</h3>
-    <p class="mb-0">Al revisar de derecha a izquierda, la primera diferencia aparece en la columna de las <strong>{{ review.column_name }}</strong>.</p></div>
+<div class="alert alert-danger" role="status"><h3 class="h5">Requiere revisión</h3>
+    <p class="mb-0">Al revisar de derecha a izquierda, la primera diferencia aparece en la columna de las <strong>{{ review.column_name }}</strong>.{% if review.mismatch_kind == "carry" %} Revisa la marca de llevada que confirmaste sobre esa columna.{% endif %}</p></div>
 {% endif %}
-<div class="table-responsive"><table class="table text-center align-middle">
+<div class="table-responsive"><table class="table sum-columns text-center align-middle">
     <caption>Transcripción confirmada, ordenada por columnas.</caption>
     <thead><tr><th scope="col"><span class="visually-hidden">Fila</span></th>
-        {% for column in review.columns %}<th scope="col" {% if column.needs_review %}class="table-warning"{% endif %}><abbr title="{{ column.name }}">{{ column.label }}</abbr></th>{% endfor %}
+        {% for column in review.columns %}<th scope="col" {% if column.needs_review %}class="review-cell"{% endif %}><abbr title="{{ column.name }}">{{ column.label }}</abbr></th>{% endfor %}
     </tr></thead>
     <tbody class="font-monospace fs-4">
+        {% if review.carry_count %}<tr><th scope="row" class="small fs-6">Llevadas<br>confirmadas</th>{% for column in review.columns %}<td class="small fs-6 {% if column.carry_needs_review %}review-cell fw-bold{% endif %}">{{ column.written_carry }}{% if column.carry_needs_review %}<span class="d-block">Revisa</span>{% endif %}</td>{% endfor %}</tr>{% endif %}
         <tr><th scope="row"><span class="visually-hidden">Primer número</span></th>{% for column in review.columns %}<td>{{ column.operand_a }}</td>{% endfor %}</tr>
-        <tr class="border-bottom border-dark border-2"><th scope="row">+</th>{% for column in review.columns %}<td>{{ column.operand_b }}</td>{% endfor %}</tr>
-        <tr><th scope="row"><span class="visually-hidden">Tu resultado</span></th>{% for column in review.columns %}<td {% if column.needs_review %}class="table-warning fw-bold"{% endif %}>{{ column.written_result }}{% if column.needs_review %}<span class="d-block small fs-6">Revisa</span>{% endif %}</td>{% endfor %}</tr>
+        <tr class="operand-line"><th scope="row">+</th>{% for column in review.columns %}<td>{{ column.operand_b }}</td>{% endfor %}</tr>
+        <tr><th scope="row"><span class="visually-hidden">Tu resultado</span></th>{% for column in review.columns %}<td {% if column.result_needs_review %}class="review-cell fw-bold"{% endif %}>{{ column.written_result }}{% if column.result_needs_review %}<span class="d-block small fs-6">Revisa</span>{% endif %}</td>{% endfor %}</tr>
     </tbody>
 </table></div>
 {% if review.status == 'requiere_revision' %}
 <section aria-labelledby="tutoring-title" class="mt-4"><h3 id="tutoring-title" class="h5">Tutoría paso a paso</h3>
     <p class="text-secondary">Usa las pistas para revisar tu hoja y vuelve a intentarlo.</p>
-    {% for hint in hints %}<div class="alert alert-info"><h4 class="h6">Pista {{ forloop.counter }}</h4><p class="mb-0">{{ hint }}</p></div>{% endfor %}
+    {% for hint in hints %}<div class="alert hint-card"><h4 class="h6">Pista {{ forloop.counter }}</h4><p class="mb-0">{{ hint }}</p></div>{% endfor %}
     {% if next_hint %}<form method="post" action="{% url 'tutoring:show_hint' %}" class="mb-3">
         {% csrf_token %}<input type="hidden" name="exercise_id" value="{{ exercise.pk }}">
         <input type="hidden" name="confirmation_id" value="{{ confirmed.confirmation_id }}">

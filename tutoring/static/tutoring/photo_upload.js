@@ -41,7 +41,17 @@
         updateControls();
     }
 
-    input.addEventListener("change", resetPhoto);
+    function showPreview(file) {
+        if (!file) return;
+        if (previewUrl !== null) URL.revokeObjectURL(previewUrl);
+        previewUrl = URL.createObjectURL(file);
+        previewImage.src = previewUrl;
+        previewBox.hidden = false;
+    }
+    input.addEventListener("change", () => {
+        resetPhoto();
+        showPreview(input.files[0]);
+    });
     if (dropZone) {
         dropZone.addEventListener("dragover", (event) => {
             if (input.disabled || !event.dataTransfer.types.includes("Files")) return;
@@ -87,6 +97,7 @@
             return;
         }
 
+        showPreview(file);
         const requestRevision = revision;
         const data = new FormData(form);
         const requestController = new AbortController();
@@ -112,9 +123,7 @@
                 return;
             }
 
-            previewUrl = URL.createObjectURL(file);
-            previewImage.src = previewUrl;
-            previewBox.hidden = false;
+            showPreview(file);
             const reading = result.reading;
             if (!reading) {
                 showMessage("No llegó una lectura. Actualiza la página y vuelve a cargar la foto.", "warning");

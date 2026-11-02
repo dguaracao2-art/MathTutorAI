@@ -23,7 +23,7 @@ class PhotoUploadForm(forms.Form):
                 "La fotografía debe pesar como máximo 5 MB."
             )
 
-        if photo.image.format not in ("JPEG", "PNG"):
+        if photo.image.format not in ("JPEG", "PNG", "MPO"):
             raise forms.ValidationError(
                 "Selecciona una imagen JPG o PNG."
             )
@@ -76,12 +76,20 @@ class SumConfirmationForm(PhotoUploadForm):
         error_messages=SUM_NUMBER_ERRORS,
     )
 
+    carry_tens = forms.IntegerField(label="Llevada sobre las decenas", required=False,
+                                    min_value=0, max_value=1, error_messages=SUM_NUMBER_ERRORS)
+    carry_hundreds = forms.IntegerField(label="Llevada sobre las centenas", required=False,
+                                       min_value=0, max_value=1, error_messages=SUM_NUMBER_ERRORS)
+    carry_thousands = forms.IntegerField(label="Llevada sobre los millares", required=False,
+                                        min_value=0, max_value=1, error_messages=SUM_NUMBER_ERRORS)
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self.fields["photo"].label = "Fotografía"
 
-        for name in ("operand_a", "operand_b", "written_result"):
+        for name in ("operand_a", "operand_b", "written_result",
+                     "carry_tens", "carry_hundreds", "carry_thousands"):
             self.fields[name].widget.attrs.update({
                 "class": "form-control",
                 "inputmode": "numeric",

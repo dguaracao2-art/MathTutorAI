@@ -48,7 +48,8 @@ def check_sum(request):
     state = request.session.get('sum_review', {})
     # Reenviar el mismo formulario o recargar no añade otro intento.
     if state.get('confirmation_id') != confirmed['confirmation_id']:
-        review = review_sum(confirmed['operand_a'], confirmed['operand_b'], confirmed['written_result'])
+        review = review_sum(confirmed['operand_a'], confirmed['operand_b'],
+                            confirmed['written_result'], carries=confirmed.get('carries'))
         progress = request.session.get('sum_practice', {})
         if progress.get('exercise') != _snapshot(exercise):
             progress = {'exercise': _snapshot(exercise), 'attempts': 0, 'had_error': False}
@@ -61,6 +62,7 @@ def check_sum(request):
                 'user': request.user, 'exercise': exercise,
                 'operand_a': confirmed['operand_a'], 'operand_b': confirmed['operand_b'],
                 'written_result': confirmed['written_result'],
+                'carries': confirmed.get('carries', {}),
                 'status': 'corregido' if corrected else review['status'],
             },
         )
@@ -80,7 +82,8 @@ def review_result(request):
     exercise, confirmed, error = _context(request, reviewed=True)
     if error is not None:
         return error
-    review = review_sum(confirmed['operand_a'], confirmed['operand_b'], confirmed['written_result'])
+    review = review_sum(confirmed['operand_a'], confirmed['operand_b'],
+                            confirmed['written_result'], carries=confirmed.get('carries'))
     state = request.session['sum_review']
     available = hints_for(review)
     level = state['hint_level']
@@ -99,7 +102,8 @@ def show_hint(request):
     _, confirmed, error = _context(request, submitted=True, reviewed=True)
     if error is not None:
         return error
-    review = review_sum(confirmed['operand_a'], confirmed['operand_b'], confirmed['written_result'])
+    review = review_sum(confirmed['operand_a'], confirmed['operand_b'],
+                            confirmed['written_result'], carries=confirmed.get('carries'))
     state = request.session['sum_review']
     level = state['hint_level']
     if review['status'] == 'requiere_revision' and level < 2:

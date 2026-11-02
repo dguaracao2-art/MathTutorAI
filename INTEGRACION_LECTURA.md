@@ -1,140 +1,29 @@
-# MathTutor AI: lectura de fotografías en la página
+# Lectura de fotografías y confirmación
 
-Actualización preparada sobre el commit `2b8dfa9`, en la rama
-`feat/lectura-manuscrita` (23 de octubre de 2026).
+## Implementación actual
 
-## Qué hace esta actualización
+Django valida la fotografía, separa las tres filas y ejecuta TrOCR local. El usuario revisa y confirma la propuesta antes de comprobar la suma. El historial y la tutoría ya están implementados: su guía está en `TUTORIA_SUMAS.md`.
 
-Al pulsar **Cargar y leer fotografía**, Django valida el archivo, separa las tres
-filas y ejecuta el lector TrOCR. La página muestra la foto y propone los dos
-operandos y el resultado escrito. Todos los números siguen siendo editables.
-El usuario debe compararlos con la hoja y pulsar **Confirmar números**.
+El lector es experimental. Admite una suma vertical clara en tinta azul, signo + separado y una raya debajo de los operandos. Los límites de entrada son 5 MB y 20 megapíxeles. Los archivos JPG de cámara que Pillow identifica internamente como MPO se abren usando su imagen principal; no se cambia el original ni se lee su imagen auxiliar.
 
-La segunda fotografía de prueba contiene 23 + 14 con resultado escrito 32.
-El lector debe proponer **23, 14 y 32**. Confirmar la lectura conserva el 32;
-la comprobación matemática y las pistas corresponden a la siguiente etapa.
+La vista previa aparece al seleccionar la foto. Las lecturas parciales dejan vacíos sus campos. Si se aisló la suma pero todos los números quedaron vacíos, se permite completarlos mirando la hoja y la confirmación se identifica como manual. Si falla la separación, se pide otra foto. Los números confirmados nunca se usan para incrementar la exactitud del OCR.
 
-Esta sigue siendo una prueba para **una suma vertical, con tinta azul, signo +
-separado, raya horizontal y sin llevadas manuscritas adicionales**. Dos fotos
-exitosas no demuestran precisión general. Hay que ampliar las pruebas antes de
-cubrir el alcance final del proyecto.
+Las llevadas pequeñas se transcriben manualmente en tres campos opcionales. La lectura automática de estas marcas permanece pendiente. No se debe presentar la suma aritmética con llevadas como evidencia de reconocimiento automático de sus anotaciones.
 
-## Aplicar en tu computadora
+## Separación entre lectura y comprobación
 
-1. Trabaja en `feat/lectura-manuscrita`. El avance anterior ya está en GitHub.
-   Si el servidor está corriendo, detén esa terminal con Ctrl+C.
-2. Extrae el contenido del ZIP de actualización directamente dentro de
-   `MathTutorAI`, en la carpeta que contiene `manage.py`. Acepta combinar las
-   carpetas y reemplazar los archivos incluidos. Conserva las otras carpetas.
-3. En Git Bash, desde MathTutorAI, ejecuta uno por uno:
+`tutoring/services/handwriting.py` no recibe operandos esperados ni la respuesta del ejercicio. `sum_review.py` comprueba los datos confirmados por el estudiante. El resultado escrito de una foto puede estar equivocado y debe conservarse al transcribir; por ejemplo, leer 23 + 14 con resultado escrito 32 no debe convertirse automáticamente en 37.
 
-```bash
-source .venv/Scripts/activate
-python -m pip install -r requirements-vision.txt
-python -m pip check
-python manage.py check
-python manage.py test tutoring --noinput
-```
+La confirmación exige un comprobante firmado, asociado a la sesión, usuario, ejercicio y huella de la fotografía, que vence a los 30 minutos. Los operandos confirmados deben coincidir con la suma elegida. Cambiar la foto obliga a confirmar nuevamente.
 
-La instalación ahora incluye las dependencias de Django y de visión desde un
-solo comando. Se unificó Pillow en 12.3.0: antes un archivo pedía 13.0.0 y el
-otro exigía una versión menor que 13. No se agregaron migraciones.
-Las pruebas automáticas usan una base temporal y propuestas simuladas; no
-modifican tu base de ejercicios ni descargan el modelo.
+## Modelo y privacidad
 
-4. Inicia el servidor:
+El modelo se carga una vez por proceso y se reutiliza; la web no inicia descargas durante una petición. Las inferencias de un mismo proceso se serializan. Una petición que encuentra el lector ocupado recibe un aviso para volver a intentarlo.
 
-```bash
-python manage.py runserver
-```
+La fotografía se procesa en memoria durante la petición y no se guarda en la base de datos. La vista previa usa una URL temporal del navegador que se revoca al cambiar la imagen o salir de la página. El historial conserva los números y las marcas confirmadas, no las fotos. Las salidas creadas explícitamente por las herramientas de terminal permanecen en la carpeta privada `local_ocr/`.
 
-Entra al aplicativo en http://127.0.0.1:8000/, inicia sesión y elige **23 + 14**.
-Si la página ya estaba abierta, actualízala con Ctrl+R.
+El último ensayo comunicado obtuvo 48% de lectura exacta antes de esta actualización. Se necesita una nueva medición para conocer el efecto de estos cambios; no se atribuye aquí un porcentaje nuevo. Los avisos del modelo y los tiempos locales no sustituyen las mediciones RNF-01 y RNF-02.
 
-## Comprobar en la página
+## Mantenimiento
 
-| Acción | Resultado esperado |
-| --- | --- |
-| Cargar `Img 1.jpeg` | Campos propuestos: 23, 14 y 37. |
-| Confirmar esa lectura | Mensaje informativo con el resultado escrito 37. |
-| Seleccionar `Img 2.jpeg` | Se limpian la vista previa, los campos y el aviso anteriores. |
-| Cargar esa segunda foto | Campos propuestos: 23, 14 y 32. |
-| Confirmarla | Conserva el 32, sin marcar la suma como matemáticamente correcta. |
-| Cambiar temporalmente el segundo número a 15 y confirmar | Pide revisar porque no coincide con el ejercicio elegido. Volver a 14 permite confirmar. |
-| Cargar una hoja en blanco | Muestra lectura pendiente y pide otra fotografía; no habilita confirmación. |
-| Actualizar la página | Mantiene el ejercicio elegido; vuelve a pedir cargar la foto. |
-
-Una lectura parcial deja vacíos los números que no pudo interpretar. Una foto
-sin una suma identificable no habilita el formulario de confirmación.
-Las imágenes de otros estilos pueden quedar pendientes porque el lector aún
-está en una fase experimental. La captura de cámara usa el mismo flujo de carga.
-
-La primera lectura después de iniciar Django puede tardar más mientras carga
-el modelo en memoria. Después lo reutiliza dentro del mismo proceso. Si está
-ocupado, pide esperar y volver a cargar la foto.
-
-## Si aparece «El lector no está disponible»
-
-Revisa el mensaje de la terminal de Django. La web utiliza el modelo ya guardado
-en la caché local, sin iniciar descargas durante una carga de foto. Si el modelo
-falta (por ejemplo, en la computadora de un compañero), detén el servidor y
-prepara la caché una vez con una fotografía de prueba:
-
-```bash
-python tools/probar_lectura.py "local_ocr/Img 1.jpeg" --reconocer
-```
-
-Este comando conserva la prueba por terminal y puede descargar el modelo.
-Cuando termine, vuelve a ejecutar `python manage.py runserver`.
-
-## Por qué se modifican estos archivos
-
-| Archivo | Responsabilidad |
-| --- | --- |
-| `tutoring/services/handwriting.py` | Comparte la preparación y lectura entre la terminal y Django; reutiliza el modelo y no recibe la respuesta esperada. |
-| `tutoring/views.py` | Devuelve la propuesta y verifica que la confirmación corresponde a la misma foto, sesión y ejercicio. |
-| `tutoring/static/tutoring/photo_upload.js` | Carga la imagen, presenta los avisos y descarta respuestas de fotos anteriores. |
-| `tutoring/static/tutoring/sum_confirmation.js` | Completa los campos, permite editar y envía la confirmación. |
-| Las dos plantillas de ejercicio/confirmación | Explican la revisión de números y el alcance de la captura. |
-| `tools/probar_lectura.py` | Sigue ofreciendo la prueba por terminal, usando el mismo servicio. |
-| Los dos archivos `requirements` | Instalan versiones compatibles entre sí. |
-| `tutoring/test_photo_reading.py` | Comprueba el flujo, los límites de los campos y los errores de sesión, foto y lectura. |
-
-`services` es una carpeta de lógica reutilizable dentro del mismo aplicativo
-Django. La foto se procesa durante la petición; la ruta web no guarda copias
-ni genera `local_ocr/salidas`. Los resultados de la prueba por terminal sí
-permanecen en la carpeta local ignorada por Git.
-
-El comprobante de lectura es firmado por Django y vence a los 30 minutos.
-Contiene la huella de la foto, el ejercicio y la propuesta, no la fotografía.
-La confirmación registra si la propuesta se aceptó (`ocr_confirmed`) o se
-corrigió (`ocr_edited`). No es una evaluación de la suma.
-
-## Guardar después de las pruebas manuales
-
-Cuando las dos fotos funcionen en tu navegador, revisa los cambios y guarda
-esta misma rama. Ejecuta los comandos uno por uno:
-
-```bash
-git diff --stat
-git add requirements.txt requirements-vision.txt tools/probar_lectura.py tutoring/services tutoring/views.py tutoring/static/tutoring/photo_upload.js tutoring/static/tutoring/sum_confirmation.js tutoring/templates/tutoring/exercise_detail.html tutoring/templates/tutoring/_sum_confirmation.html tutoring/test_photo_reading.py INTEGRACION_LECTURA.md
-git commit -m "feat: integrar lectura de fotos con confirmacion web"
-git push
-git status
-```
-
-El Pull Request puede prepararse después de revisar la prueba en tu laptop.
-
-## Validación de esta actualización
-
-- 29 pruebas automáticas de Django aprobadas y comprobación del proyecto sin errores.
-- 7 pruebas de interacción JavaScript aprobadas con un DOM simulado.
-- Carga y confirmación reales mediante el cliente de pruebas de Django y TrOCR: las
-  dos fotos originales produjeron 23/14/37 y 23/14/32. Ambas se confirmaron sin
-  alterar el resultado escrito.
-- Una hoja blanca y una captura del explorador de archivos quedaron en lectura
-  pendiente, sin habilitar confirmación.
-- Se comprobó la reutilización del modelo dentro del mismo proceso.
-
-Queda por verificar la interacción en el navegador de la laptop y ampliar el
-conjunto de fotos, escrituras y condiciones de captura.
+Conservar las dependencias existentes y la misma rama de trabajo. Ejecutar `python manage.py test --noinput` para las regresiones del servidor. Consultar `EVALUACION_OCR.md` para medir OCR sin mezclarlo con la edición manual.

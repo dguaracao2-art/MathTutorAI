@@ -1,4 +1,5 @@
 <!doctype html>
+{% load static %}
 <html lang="es">
 <head>
     <meta charset="utf-8">
@@ -6,14 +7,12 @@
     <title>{% block title %}MathTutor AI{% endblock %}</title>
     <link
         rel="stylesheet"
-        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css"
-        integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB"
-        crossorigin="anonymous">
+        href="{% static 'accounts/vendor/bootstrap-5.3.8.min.css' %}?v=interfaz2">
+    <link rel="stylesheet" href="{% static 'accounts/app.css' %}?v=encuadre1">
 </head>
 <body class="bg-light">
     <main class="container py-5">
-        <div class="card border-0 shadow-sm mx-auto"
-             style="max-width: 480px;">
+        <div class="card app-shell border-0 shadow-sm mx-auto">
             <div class="card-body p-4">
                 <h1 class="h3 text-primary mb-4">MathTutor AI</h1>
                 {% block content %}{% endblock %}

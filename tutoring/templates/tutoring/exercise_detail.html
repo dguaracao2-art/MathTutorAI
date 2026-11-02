@@ -46,13 +46,22 @@
     <div id="camera-message" role="status" hidden></div>
 
     <div id="camera-box" class="mt-3" hidden>
-        <div class="border border-2 border-primary rounded p-1">
+        <p id="camera-help" class="form-text">
+            Acerca la hoja hasta que la suma ocupe buena parte del marco azul.
+            Incluye los dos números, el signo +, la raya y tu resultado.
+            Mantén la hoja de frente, bien iluminada y quieta.
+        </p>
+        <div id="camera-frame" class="camera-frame rounded">
             <video id="camera-video"
                    class="w-100 d-block rounded"
+                   width="480"
+                   height="360"
+                   aria-describedby="camera-help"
                    autoplay
                    playsinline
                    muted>
             </video>
+            <div id="camera-guide" aria-hidden="true"></div>
         </div>
 
         <div class="d-flex gap-2 flex-wrap mt-2">
@@ -99,7 +108,8 @@
         <div id="photo-help" class="form-text">
             JPG o PNG. Máximo 5 MB y 20 megapíxeles.
             Para esta prueba, usa una suma vertical con tinta azul,
-            signo + separado, una raya bajo los dos números y sin llevadas anotadas.
+            signo + separado y una raya bajo los dos números. El lector automático aún no
+            reconoce las pequeñas marcas de llevada; puedes transcribirlas al confirmar.
         </div>
     </div>
 
@@ -135,7 +145,7 @@
     </form>
 </div>
 
-<script src="{% static 'tutoring/photo_upload.js' %}?v=lectura2" defer></script>
-<script src="{% static 'tutoring/camera_capture.js' %}" defer></script>
-<script src="{% static 'tutoring/sum_confirmation.js' %}?v=tutoria1" defer></script>
+<script src="{% static 'tutoring/photo_upload.js' %}?v=cierre1" defer></script>
+<script src="{% static 'tutoring/camera_capture.js' %}?v=encuadre1" defer></script>
+<script src="{% static 'tutoring/sum_confirmation.js' %}?v=cierre1" defer></script>
 {% endblock %}
