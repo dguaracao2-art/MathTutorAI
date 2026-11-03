@@ -6,6 +6,10 @@
 <h2 class="h4">Iniciar sesión</h2>
 <p class="text-secondary">Entra para practicar tus sumas.</p>
 
+{% if request.GET.registered == "1" %}
+<div class="alert alert-success" role="status">Cuenta creada. Inicia sesión para comenzar.</div>
+{% endif %}
+
 {% if form.errors %}
 <div class="alert alert-danger" role="alert">
     Revisa tu usuario y contraseña e inténtalo nuevamente.
@@ -33,4 +37,7 @@
     <input type="hidden" name="next" value="{{ next }}">
     <button type="submit" class="btn btn-primary w-100">Entrar</button>
 </form>
+<p class="mt-3 mb-0 text-center">
+    <a href="{% url 'accounts:register' %}">Crear cuenta</a>
+</p>
 {% endblock %}
