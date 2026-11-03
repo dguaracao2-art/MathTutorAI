@@ -6,6 +6,7 @@ from . import views
 app_name = "accounts"
 
 urlpatterns = [
+    path("crear-cuenta/", views.register, name="register"),
     path("", views.home, name="home"),
     path(
         "iniciar-sesion/",
