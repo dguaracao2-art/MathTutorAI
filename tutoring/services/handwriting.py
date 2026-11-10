@@ -55,8 +55,12 @@ def agrupar_componentes(componentes, distancia):
     return grupos
 
 
-def preparar_suma(fotografia):
-    """Separar filas desde una ruta o un archivo abierto, sin guardar imágenes."""
+def preparar_suma(fotografia, usar_detector=True):
+    """Separar filas desde una ruta o un archivo abierto, sin guardar imágenes.
+
+    ``usar_detector=False`` omite el detector entrenado y usa solo OpenCV:
+    lo necesitan la preparación del conjunto y la comparación de métodos.
+    """
     from PIL import Image, ImageOps
 
     if isinstance(fotografia, (str, os.PathLike)):
@@ -79,7 +83,10 @@ def preparar_suma(fotografia):
             # JPEG de cámara con imagen auxiliar: usar solo la imagen principal.
             archivo.seek(0)
             imagen = ImageOps.exif_transpose(archivo).convert('RGB')
-    except (OSError, Image.DecompressionBombError) as exc:
+    except (OSError, ImportError, Image.DecompressionBombError) as exc:
+        # ImportError: al cargarse, ultralytics sustituye PIL.Image.open por una
+        # versión que busca códecs opcionales. Una foto ilegible debe pedir otra
+        # fotografía, no anunciar que el lector no está disponible.
         raise PhotoNotReadable('La fotografía está dañada o no se puede leer.') from exc
     imagen.thumbnail((1600, 1600), Image.Resampling.LANCZOS)
     try:
@@ -91,7 +98,20 @@ def preparar_suma(fotografia):
         except PhotoNotReadable:
             # El papel azulado puede cumplir el criterio de color de la tinta.
             # Otsu exige además un trazo oscuro; no usa valores del ejercicio.
-            return _separar_suma(imagen, 15, 8, 220, limpiar_fondo=True)
+            try:
+                return _separar_suma(imagen, 15, 8, 220, limpiar_fondo=True)
+            except PhotoNotReadable:
+                # Último recurso: el detector entrenado solo interviene cuando
+                # OpenCV ya no pudo separar la hoja. Así nunca empeora una
+                # fotografía que el método actual resuelve bien. Sin modelo
+                # entrenado devuelve None y se conserva el aviso original.
+                if usar_detector:
+                    from .yolo_segmentation import separar_con_yolo
+
+                    deteccion = separar_con_yolo(imagen)
+                    if deteccion is not None:
+                        return deteccion
+                raise
 
 
 def _separar_suma(imagen, contraste_rojo, contraste_verde, rojo_maximo,

@@ -39,7 +39,8 @@ class SegmentacionTests(SimpleTestCase):
         ):
             with self.subTest(numeros=numeros, tenue=tenue, fondo=fondo):
                 archivo = suma_generada(numeros, tenue=tenue, fondo=fondo)
-                _, _, recortes, cajas, _ = lector.preparar_suma(archivo)
+                # Comprueba la separación con OpenCV, haya o no detector instalado.
+                _, _, recortes, cajas, _ = lector.preparar_suma(archivo, usar_detector=False)
                 self.assertEqual(set(recortes), set(lector.RECORTES))
                 for nombre, centro_y in zip(lector.RECORTES, (125, 205, 305)):
                     x1, y1, x2, y2 = cajas[nombre]
@@ -62,7 +63,8 @@ class SegmentacionTests(SimpleTestCase):
             dibujo.line((0, y, 640, y), fill=(170, 170, 170))
         archivo = BytesIO()
         foto.save(archivo, 'PNG')
-        _, _, recortes, _, _ = lector.preparar_suma(archivo)
+        # El recorte binario es propio de la ruta de OpenCV con tinta aislada.
+        _, _, recortes, _, _ = lector.preparar_suma(archivo, usar_detector=False)
         for recorte in recortes.values():
             tonos = set(np.unique(np.asarray(recorte.convert('L'))).tolist())
             self.assertEqual(tonos, {0, 255})

@@ -47,9 +47,26 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "rest_framework",
     "accounts.apps.AccountsConfig",
     "tutoring.apps.TutoringConfig",
 ]
+
+# API REST de la práctica. Usa la misma sesión que la web: no se añade otro
+# mecanismo de autenticación ni tokens que puedan quedar expuestos (RNF-03).
+# El límite de peticiones protege al lector, que atiende una foto a la vez.
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {"user": "60/hour"},
+}
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
