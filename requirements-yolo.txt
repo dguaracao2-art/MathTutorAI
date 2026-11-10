@@ -1,0 +1,4 @@
+-r requirements-vision.txt
+# Detector de filas. Opcional: sin este paquete y sin modelo entrenado,
+# la separación continúa con OpenCV y el proyecto funciona igual.
+ultralytics==8.4.208
