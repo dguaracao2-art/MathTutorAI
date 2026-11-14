@@ -105,7 +105,159 @@ h1, h2, h3 { color: #172554; }
 .carry-details { padding: 12px; border: 1px solid #dbe3ef; border-radius: 8px; }
 summary { cursor: pointer; color: #1d4ed8; font-weight: 600; }
 button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px solid #93c5fd; outline-offset: 3px; }
+
+/* ----------------------------------------------------------------------
+   Detección en tiempo real
+   ---------------------------------------------------------------------- */
+#camera-overlay {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+.camera-frame[data-deteccion="lista"] #camera-guide { border-color: #15803d; }
+.camera-frame[data-deteccion="parcial"] #camera-guide { border-color: #f59e0b; }
+#camera-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    margin-bottom: 8px;
+    font-size: .9rem;
+    font-weight: 600;
+    color: #545454;
+    min-height: 24px;
+}
+#camera-status::before {
+    content: "";
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #cbd5e1;
+    flex: none;
+}
+#camera-status[data-estado="buscando"]::before { background: #f59e0b; }
+#camera-status[data-estado="lista"]::before { background: #15803d; }
+#camera-status[data-estado="error"]::before { background: #b91c1c; }
+#camera-status[data-estado="lista"] { color: #15803d; }
+
+/* ----------------------------------------------------------------------
+   Tarjetas de panel y rejillas
+   ---------------------------------------------------------------------- */
+.panel-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 20px;
+    background: #fff;
+}
+.panel-card + .panel-card { margin-top: 20px; }
+.panel-card > :first-child { margin-top: 0; }
+.panel-card > :last-child { margin-bottom: 0; }
+
+/* La suma del ejercicio, compacta: cifra y etiqueta en la misma línea para
+   no alargar la columna de la izquierda. */
+.exercise-figure {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin: 12px 0;
+}
+.exercise-figure__numbers { width: 130px; text-align: right; }
+
+/* Rejilla usada por la lista de sumas y por el progreso: tantas tarjetas por
+   fila como quepan, en lugar de una debajo de otra. */
+.card-grid {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    margin-bottom: 24px;
+}
+.card-grid > * { margin: 0 !important; }
+
+/* El texto de espera desaparece en cuanto hay una fotografía o una lectura,
+   sin necesidad de tocar los guiones de carga y confirmación. */
+#photo-preview-box:not([hidden]) ~ #lectura-vacia,
+#confirmation-box:not([hidden]) ~ #lectura-vacia,
+#review-action-box:not([hidden]) ~ #lectura-vacia { display: none; }
+
+/* ----------------------------------------------------------------------
+   Disposición horizontal en computadora.
+   El teléfono conserva una sola columna: estas reglas solo aplican desde
+   992 px. La tarjeta se ensancha únicamente donde la plantilla pide
+   app-shell--wide.
+   ---------------------------------------------------------------------- */
+.workspace { display: grid; gap: 20px; }
+.workspace__panel { min-width: 0; }
+
+@media (min-width: 992px) {
+    main.container { max-width: 1400px; padding: 32px 24px !important; }
+    .app-shell--wide { max-width: 100%; }
+    .app-shell--wide > .card-body { padding: 28px 32px !important; }
+
+    /* La cámara manda: ocupa la columna izquierda, ancha y a toda la altura.
+       A la derecha, la suma a copiar arriba y la lectura debajo, de modo que
+       el resultado aparezca sin desplazarse. */
+    .workspace {
+        grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+        gap: 24px;
+        align-items: start;
+        grid-template-areas:
+            "captura ejercicio"
+            "captura lectura";
+        align-content: start;
+    }
+    .workspace__panel--ejercicio { grid-area: ejercicio; }
+    .workspace__panel--captura { grid-area: captura; }
+    .workspace__panel--lectura { grid-area: lectura; }
+    .panel-card + .panel-card { margin-top: 0; }
+
+    /* El marco crece con la columna en lugar de quedarse en 427 px. */
+    .camera-frame { max-width: 100%; }
+    #camera-video { max-height: none; }
+    .sum-columns { margin-block: 16px; }
+
+    /* La columna derecha tiene que caber sin desplazarse: la vista previa
+       sirve para cotejar cifras, no para verlas en grande, así que se
+       contiene y el formulario de confirmación se aprieta. */
+    #photo-preview { max-height: 150px; }
+    .workspace__panel--lectura #photo-preview-box h3 { font-size: 1rem; }
+    .workspace__panel--lectura #confirmation-box { margin-top: 12px !important; }
+    .workspace__panel--lectura #confirmation-box > p { font-size: .85rem; }
+    .workspace__panel--lectura #confirmation-form .mb-3 { margin-bottom: 8px !important; }
+    .workspace__panel--lectura #confirmation-form .form-label { margin-bottom: 2px; }
+    .workspace__panel--lectura #review-action-box { margin-top: 12px !important; }
+    .workspace__panel--lectura .alert { padding: 10px 12px; margin-bottom: 10px; }
+
+    /* La suma a copiar es una referencia, no el centro de la pantalla. */
+    .workspace__panel--ejercicio .exercise-figure { margin: 8px 0; }
+    .workspace__panel--ejercicio .exercise-figure__numbers {
+        width: 110px;
+        font-size: 2rem !important;
+    }
+
+    /* Revisión: la tabla a un lado y la tutoría al otro. */
+    .result-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 4fr) minmax(0, 6fr);
+        gap: 24px;
+        align-items: start;
+    }
+}
+
+@media (min-width: 1400px) {
+    main.container { max-width: 1760px; }
+
+    /* En pantalla ancha la cámara se lleva aún más sitio: a esta distancia
+       es donde se decide si la suma entra completa en el marco. */
+    .workspace { grid-template-columns: minmax(0, 8fr) minmax(0, 5fr); }
+    .card-grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+}
+
 @media (max-width: 400px) {
     main.container { padding: 20px 10px !important; }
     .app-shell > .card-body { padding: 20px !important; }
+    .panel-card { padding: 16px; }
 }

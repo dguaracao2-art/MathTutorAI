@@ -8,11 +8,16 @@
     <link
         rel="stylesheet"
         href="{% static 'accounts/vendor/bootstrap-5.3.8.min.css' %}?v=interfaz2">
-    <link rel="stylesheet" href="{% static 'accounts/app.css' %}?v=encuadre1">
+    <link rel="stylesheet" href="{% static 'accounts/app.css' %}?v=horizontal2">
 </head>
 <body class="bg-light">
     <main class="container py-5">
-        <div class="card app-shell border-0 shadow-sm mx-auto">
+        {% comment %}
+        Las pantallas de trabajo piden app-shell--wide para ocupar el ancho de
+        la pantalla en computadora. Acceso y registro no lo definen y conservan
+        la tarjeta estrecha centrada.
+        {% endcomment %}
+        <div class="card app-shell {% block shell_class %}{% endblock %} border-0 shadow-sm mx-auto">
             <div class="card-body p-4">
                 <h1 class="h3 text-primary mb-4">MathTutor AI</h1>
                 {% block content %}{% endblock %}

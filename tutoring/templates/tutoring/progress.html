@@ -1,17 +1,27 @@
 {% extends "accounts/base.html" %}
 {% block title %}Mi progreso | MathTutor AI{% endblock %}
+
+{% block shell_class %}app-shell--wide{% endblock %}
+
 {% block content %}
 <h2 class="h4">Mi progreso</h2>
 <p class="text-secondary">Aquí aparecen las sumas que comprobaste con esta cuenta.</p>
+
+<div class="card-grid">
 {% for record in records %}
-<article class="border rounded p-3 mb-3">
-    <h3 class="h5">{{ record.exercise }}</h3>
-    <p class="mb-1">Última revisión: {{ record.date|date:"d/m/Y H:i" }}</p>
-    <p class="mb-1">Estado: {{ record.status }}</p>
-    <p class="mb-0">Intentos: {{ record.attempts }} · Pistas consultadas: {{ record.hints }}</p>
-</article>
+    <article class="border rounded p-3">
+        <h3 class="h5">{{ record.exercise }}</h3>
+        <p class="mb-1 small">Última revisión: {{ record.date|date:"d/m/Y H:i" }}</p>
+        <p class="mb-1 small">Estado: {{ record.status }}</p>
+        <p class="mb-0 small">Intentos: {{ record.attempts }} · Pistas consultadas: {{ record.hints }}</p>
+    </article>
 {% empty %}
-<p>Aún no tienes ejercicios registrados.</p>
+    <p>Aún no tienes ejercicios registrados.</p>
 {% endfor %}
-<a href="{% url 'tutoring:exercise_list' %}" class="btn btn-primary w-100">Practicar otra suma</a>
+</div>
+
+<div class="d-flex gap-2 flex-wrap">
+    <a href="{% url 'tutoring:exercise_list' %}" class="btn btn-primary">Practicar otra suma</a>
+    <a href="{% url 'accounts:home' %}" class="btn btn-outline-primary">Volver al inicio</a>
+</div>
 {% endblock %}

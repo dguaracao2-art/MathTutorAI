@@ -46,11 +46,24 @@ INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
+    # daphne debe preceder a staticfiles: sustituye el servidor de desarrollo
+    # por uno ASGI para que runserver también acepte WebSocket.
+    "daphne",
+    "channels",
     "django.contrib.staticfiles",
     "rest_framework",
     "accounts.apps.AccountsConfig",
     "tutoring.apps.TutoringConfig",
 ]
+
+# Canal en tiempo real de la guía de encuadre. Un solo proceso atiende HTTP y
+# WebSocket, de modo que el despliegue conserva una sola unidad ejecutable.
+# La capa en memoria basta porque los mensajes no salen de la conexión que los
+# origina: no hay salas ni difusión entre usuarios.
+ASGI_APPLICATION = "config.asgi.application"
+CHANNEL_LAYERS = {
+    "default": {"BACKEND": "channels.layers.InMemoryChannelLayer"},
+}
 
 # API REST de la práctica. Usa la misma sesión que la web: no se añade otro
 # mecanismo de autenticación ni tokens que puedan quedar expuestos (RNF-03).

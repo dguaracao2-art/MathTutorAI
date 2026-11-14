@@ -3,138 +3,205 @@
 
 {% block title %}Suma elegida | MathTutor AI{% endblock %}
 
+{% block shell_class %}app-shell--wide{% endblock %}
+
 {% block content %}
 <h2 class="h4">Tu suma para practicar</h2>
 {% for message in messages %}<div class="alert alert-info" role="status">{{ message }}</div>{% endfor %}
 
-<p class="text-secondary">
-    Copia esta suma en tu hoja y resuélvela.
-    Alinea las unidades, decenas y centenas.
-</p>
+{% comment %}
+En computadora la pantalla se reparte en columnas: el ejercicio, la captura y
+la lectura. Desde 1400 px son tres columnas y el recorrido cabe sin
+desplazarse; entre 992 y 1400 px son dos; por debajo vuelve a una sola y el
+recorrido es el de siempre.
+{% endcomment %}
+<div class="workspace">
 
-<div class="font-monospace fs-1 text-end mx-auto my-4"
-     style="width: 140px;">
-    <div>{{ exercise.operand_a }}</div>
-    <div class="border-bottom border-2 border-dark">
-        + {{ exercise.operand_b }}
+    <div class="workspace__panel workspace__panel--ejercicio">
+        <section class="panel-card">
+            <h3 class="h5">Copia esta suma en tu hoja</h3>
+
+            <p class="text-secondary small">
+                Resuélvela alineando las unidades, decenas y centenas.
+            </p>
+
+            <div class="exercise-figure">
+                <div class="font-monospace fs-1 exercise-figure__numbers">
+                    <div>{{ exercise.operand_a }}</div>
+                    <div class="border-bottom border-2 border-dark">
+                        + {{ exercise.operand_b }}
+                    </div>
+                </div>
+
+                <div>
+                    {% if exercise.has_carry %}
+                        <span class="badge text-bg-warning">Con llevadas</span>
+                    {% else %}
+                        <span class="badge text-bg-success">Sin llevadas</span>
+                    {% endif %}
+                </div>
+            </div>
+        </section>
     </div>
-</div>
 
-<p class="text-center">
-    {% if exercise.has_carry %}
-        <span class="badge text-bg-warning">Con llevadas</span>
-    {% else %}
-        <span class="badge text-bg-success">Sin llevadas</span>
-    {% endif %}
-</p>
+    <div class="workspace__panel workspace__panel--captura">
+        <section class="panel-card">
+            <h3 class="h5">Fotografía de tu solución</h3>
 
-<hr class="my-4">
-
-<h3 class="h5">Fotografía de tu solución</h3>
-
-<p class="text-secondary">
-    Incluye los dos números y tu resultado.
-    Usa buena iluminación y evita las sombras.
-</p>
-<div class="mb-4">
-    <button type="button"
-            id="open-camera"
-            class="btn btn-outline-primary w-100">
-        Abrir cámara
-    </button>
-
-    <div id="camera-message" role="status" hidden></div>
-
-    <div id="camera-box" class="mt-3" hidden>
-        <p id="camera-help" class="form-text">
-            Acerca la hoja hasta que la suma ocupe buena parte del marco azul.
-            Incluye los dos números, el signo +, la raya y tu resultado.
-            Mantén la hoja de frente, bien iluminada y quieta.
-        </p>
-        <div id="camera-frame" class="camera-frame rounded">
-            <video id="camera-video"
-                   class="w-100 d-block rounded"
-                   width="480"
-                   height="360"
-                   aria-describedby="camera-help"
-                   autoplay
-                   playsinline
-                   muted>
-            </video>
-            <div id="camera-guide" aria-hidden="true"></div>
-        </div>
-
-        <div class="d-flex gap-2 flex-wrap mt-2">
-            <button type="button"
-                    id="capture-photo"
-                    class="btn btn-primary"
-                    disabled>
-                Capturar foto
-            </button>
+            <p class="text-secondary small">
+                Encuadra <strong>una sola suma</strong> dentro del marco.
+                Si en la hoja hay más operaciones alrededor, acerca la cámara
+                hasta que solo entre la que estás resolviendo.
+            </p>
 
             <button type="button"
-                    id="close-camera"
-                    class="btn btn-outline-secondary">
-                Cerrar cámara
+                    id="open-camera"
+                    class="btn btn-outline-primary w-100">
+                Abrir cámara
             </button>
-        </div>
+
+            <div id="camera-message" role="status" hidden></div>
+
+            <div id="camera-box" class="mt-3" hidden>
+                <div id="camera-frame" class="camera-frame rounded">
+                    <video id="camera-video"
+                           class="w-100 d-block rounded"
+                           width="480"
+                           height="360"
+                           aria-describedby="camera-status"
+                           autoplay
+                           playsinline
+                           muted>
+                    </video>
+                    <div id="camera-guide" aria-hidden="true"></div>
+                    {% comment %}
+                    Capa donde se dibujan las filas que el detector localiza en
+                    cada cuadro. No recibe eventos del puntero.
+                    {% endcomment %}
+                    <canvas id="camera-overlay" aria-hidden="true"></canvas>
+                </div>
+
+                <p id="camera-status" role="status" data-estado="inactivo">
+                    Detección en espera.
+                </p>
+
+                <div class="form-check mb-2">
+                    <input class="form-check-input"
+                           type="checkbox"
+                           id="auto-capture"
+                           checked>
+                    <label class="form-check-label small" for="auto-capture">
+                        Capturar sola cuando la suma esté quieta y completa
+                    </label>
+                </div>
+
+                <div class="d-flex gap-2 flex-wrap">
+                    <button type="button"
+                            id="capture-photo"
+                            class="btn btn-primary"
+                            disabled>
+                        Capturar foto
+                    </button>
+
+                    <button type="button"
+                            id="close-camera"
+                            class="btn btn-outline-secondary">
+                        Cerrar cámara
+                    </button>
+                </div>
+
+                <details class="mt-2">
+                    <summary class="small">Cómo tomar una foto que se lea bien</summary>
+                    <p class="form-text mt-2 mb-0">
+                        Mantén la hoja de frente y bien iluminada, sin la sombra
+                        de la mano encima. Deja dentro del marco los dos números,
+                        el signo +, la raya y tu resultado, y nada más. Si al lado
+                        hay otras sumas, acerca la cámara hasta dejarlas fuera.
+                    </p>
+                </details>
+            </div>
+
+            <form id="photo-form"
+                  class="mt-3"
+                  method="post"
+                  enctype="multipart/form-data"
+                  action="{% url 'tutoring:upload_photo' %}">
+                {% csrf_token %}
+
+                <input type="hidden"
+                       name="exercise_id"
+                       value="{{ exercise.pk }}">
+
+                {% comment %}
+                El selector de archivo queda plegado: la vía normal es la
+                cámara. Se conserva porque es la única salida cuando la cámara
+                no está disponible, y es la que permite repetir el ensayo con
+                las fotografías ya evaluadas.
+                {% endcomment %}
+                <details id="photo-drop-zone" class="border border-2 rounded p-3 mb-3">
+                    <summary>
+                        <span class="form-label d-inline">O selecciona una fotografía</span>
+                    </summary>
+
+                    <input type="file"
+                           name="photo"
+                           id="id_photo"
+                           class="form-control mt-2"
+                           accept=".jpg,.jpeg,.png"
+                           aria-describedby="photo-help"
+                           required>
+
+                    <div id="photo-help" class="form-text mt-2">
+                        JPG o PNG, hasta 5 MB y 20 megapíxeles. También puedes
+                        arrastrar el archivo a este recuadro. Para esta prueba,
+                        usa una suma vertical con tinta azul, signo + separado y
+                        una raya bajo los dos números. El lector automático aún
+                        no reconoce las pequeñas marcas de llevada; puedes
+                        transcribirlas al confirmar.
+                    </div>
+                </details>
+
+                <button type="submit"
+                        id="upload-button"
+                        class="btn btn-primary w-100">
+                    Cargar y leer fotografía
+                </button>
+            </form>
+        </section>
     </div>
-</div>
-<form id="photo-form"
-      method="post"
-      enctype="multipart/form-data"
-      action="{% url 'tutoring:upload_photo' %}">
-    {% csrf_token %}
 
-    <input type="hidden"
-           name="exercise_id"
-           value="{{ exercise.pk }}">
+    <div class="workspace__panel workspace__panel--lectura">
+        <div id="photo-message" role="alert" hidden></div>
 
-    <div id="photo-drop-zone" class="border border-2 rounded p-3 mb-3">
-        <label for="id_photo" class="form-label">
-            Selecciona tu fotografía
-        </label>
+        <section class="panel-card">
+            <div id="photo-preview-box" hidden>
+                <h3 class="h5">Vista previa</h3>
 
-        <p class="text-secondary small mb-2">O arrastra aquí un archivo JPG o PNG.</p>
+                <img id="photo-preview"
+                     class="img-fluid rounded border d-block mx-auto"
+                     alt="Fotografía de tu solución manuscrita">
+            </div>
 
-        <input type="file"
-               name="photo"
-               id="id_photo"
-               class="form-control"
-               accept=".jpg,.jpeg,.png"
-               aria-describedby="photo-help"
-               required>
+            {% include "tutoring/_sum_confirmation.html" %}
+            {% include "tutoring/_review_action.html" %}
 
-        <div id="photo-help" class="form-text">
-            JPG o PNG. Máximo 5 MB y 20 megapíxeles.
-            Para esta prueba, usa una suma vertical con tinta azul,
-            signo + separado y una raya bajo los dos números. El lector automático aún no
-            reconoce las pequeñas marcas de llevada; puedes transcribirlas al confirmar.
-        </div>
+            <p id="lectura-vacia" class="text-secondary mb-0">
+                Aquí aparecerá lo que el sistema lea de tu fotografía.
+                Podrás corregir cualquier número antes de comprobar la suma.
+            </p>
+        </section>
     </div>
 
-    <button type="submit"
-            id="upload-button"
-            class="btn btn-primary w-100">
-        Cargar y leer fotografía
-    </button>
-</form>
-
-<div id="photo-message" role="alert" hidden></div>
-
-<div id="photo-preview-box" class="mt-4" hidden>
-    <h3 class="h5">Vista previa</h3>
-
-    <img id="photo-preview"
-         class="img-fluid rounded border d-block mx-auto"
-         alt="Fotografía de tu solución manuscrita">
 </div>
-{% include "tutoring/_sum_confirmation.html" %}
-{% include "tutoring/_review_action.html" %}
+
 <div class="d-flex gap-2 flex-wrap mt-4">
     <a href="{% url 'tutoring:exercise_list' %}"
        class="btn btn-outline-primary">
         Elegir otra suma
+    </a>
+
+    <a href="{% url 'tutoring:progress' %}" class="btn btn-outline-primary">
+        Ver mi progreso
     </a>
 
     <form method="post" action="{% url 'accounts:logout' %}">
@@ -146,6 +213,6 @@
 </div>
 
 <script src="{% static 'tutoring/photo_upload.js' %}?v=cierre1" defer></script>
-<script src="{% static 'tutoring/camera_capture.js' %}?v=encuadre1" defer></script>
+<script src="{% static 'tutoring/camera_capture.js' %}?v=tiemporeal2" defer></script>
 <script src="{% static 'tutoring/sum_confirmation.js' %}?v=cierre1" defer></script>
 {% endblock %}
