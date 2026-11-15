@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 MAXIMO_BYTES = 400 * 1024
 # Cuadros por segundo que el servidor acepta de una conexión. Por encima de
 # este ritmo los cuadros se descartan sin abrir el detector.
-CUADROS_POR_SEGUNDO = 6
+CUADROS_POR_SEGUNDO = 8
 INTERVALO_MINIMO = 1.0 / CUADROS_POR_SEGUNDO
 # Conexiones que pueden ocupar el detector al mismo tiempo en este proceso.
 DETECCIONES_SIMULTANEAS = 1

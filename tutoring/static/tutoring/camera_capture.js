@@ -18,13 +18,25 @@
     // Ritmo de envío de cuadros de guía. El servidor descarta lo que llegue
     // por encima de su propio límite, así que este valor solo evita trabajo
     // inútil en el navegador y tráfico de más.
-    const INTERVALO_ENVIO = 180;
+    const INTERVALO_ENVIO = 130;
     // Ancho del cuadro que se envía. El detector localiza filas, no cifras:
     // no necesita resolución de lectura y a 480 px responde mucho antes.
     const ANCHO_GUIA = 480;
-    // Cuántas detecciones seguidas bien encuadradas y quietas hacen falta
-    // para disparar la captura sola.
-    const DETECCIONES_PARA_CAPTURAR = 6;
+    // Cuántas detecciones seguidas bien encuadradas, quietas y nítidas hacen
+    // falta para disparar la captura sola. Con cuatro, a unas siete por
+    // segundo, la foto sale en algo más de medio segundo. Bajarlo más empieza
+    // a disparar en mitad del movimiento; el control de nitidez de abajo es
+    // lo que permite que sea tan corto sin capturar borroso.
+    const DETECCIONES_PARA_CAPTURAR = 4;
+    // Nitidez mínima exigida, en fracción de la mejor nitidez vista hace poco
+    // en esta misma escena. Es relativa y no absoluta porque el valor
+    // depende de la cámara, de la luz y del papel: lo que importa no es
+    // cuánto vale, sino que no haya caído respecto a lo que esa cámara ya
+    // consiguió.
+    const NITIDEZ_RELATIVA_MINIMA = 0.62;
+    // La referencia se desvanece poco a poco para no quedar anclada a un
+    // destello irrepetible que bloquearía la captura para siempre.
+    const DESVANECIDO_NITIDEZ = 0.97;
     // Desplazamiento máximo, en fracción del recorte, para considerar que la
     // hoja sigue quieta entre dos detecciones.
     const MOVIMIENTO_MAXIMO = 0.03;
@@ -52,6 +64,8 @@
     let estables = 0;
     let ultimoEncuadre = null;
     let ultimaDeteccion = null;
+    let nitidezActual = 0;
+    let nitidezReferencia = 0;
     let capturando = false;
 
     function showMessage(text, kind = "info") {
@@ -153,6 +167,55 @@
             w: areaGuia.width / areaFrame.width,
             h: areaGuia.height / areaFrame.height,
         };
+    }
+
+    // ------------------------------------------------------------------
+    // Nitidez
+    // ------------------------------------------------------------------
+
+    function medirNitidez(lienzo) {
+        // Energía media del gradiente sobre el recorte ya reducido. Una
+        // imagen enfocada tiene bordes marcados entre la tinta y el papel y
+        // da un valor alto; una movida los difumina y lo hunde.
+        //
+        // Se recorre uno de cada dos píxeles: a esta resolución basta para
+        // distinguir enfocado de movido y mantiene el coste en torno a un
+        // milisegundo por cuadro.
+        const contexto = lienzo.getContext("2d", { willReadFrequently: true });
+        if (!contexto) return 0;
+
+        let datos;
+        try {
+            datos = contexto.getImageData(0, 0, lienzo.width, lienzo.height).data;
+        } catch {
+            return 0;
+        }
+
+        const ancho = lienzo.width;
+        const alto = lienzo.height;
+        if (ancho < 4 || alto < 4) return 0;
+
+        let suma = 0;
+        let muestras = 0;
+        const paso = 2;
+        for (let y = paso; y < alto - paso; y += paso) {
+            for (let x = paso; x < ancho - paso; x += paso) {
+                const i = (y * ancho + x) * 4;
+                const iDerecha = i + paso * 4;
+                const iAbajo = i + paso * ancho * 4;
+                // Luminancia aproximada; no hace falta precisión de color.
+                const gris = datos[i] + datos[i + 1] * 2 + datos[i + 2];
+                const grisDerecha =
+                    datos[iDerecha] + datos[iDerecha + 1] * 2 + datos[iDerecha + 2];
+                const grisAbajo =
+                    datos[iAbajo] + datos[iAbajo + 1] * 2 + datos[iAbajo + 2];
+                const dx = gris - grisDerecha;
+                const dy = gris - grisAbajo;
+                suma += dx * dx + dy * dy;
+                muestras += 1;
+            }
+        }
+        return muestras ? suma / muestras : 0;
     }
 
     // ------------------------------------------------------------------
@@ -260,6 +323,19 @@
             return;
         }
 
+        // Una imagen movida da filas en el sitio correcto pero cifras que el
+        // lector no puede resolver. Antes se evitaba esperando más tiempo;
+        // ahora se comprueba directamente y por eso basta con cuatro cuadros.
+        if (nitidezReferencia > 0 &&
+                nitidezActual < nitidezReferencia * NITIDEZ_RELATIVA_MINIMA) {
+            estables = 0;
+            ultimoEncuadre = area;
+            ultimaDeteccion = null;
+            marcarMarco("parcial");
+            setStatus("Imagen movida. Sujeta la hoja un momento.", "buscando");
+            return;
+        }
+
         estables = sigueQuieta(area, ultimoEncuadre) ? estables + 1 : 1;
         ultimoEncuadre = area;
         // Solo se guarda para recortar cuando el encuadre es válido: así
@@ -306,6 +382,8 @@
         estables = 0;
         ultimoEncuadre = null;
         ultimaDeteccion = null;
+        nitidezActual = 0;
+        nitidezReferencia = 0;
         limpiarOverlay();
         marcarMarco(null);
     }
@@ -335,6 +413,13 @@
             video,
             region.sx, region.sy, region.sw, region.sh,
             0, 0, lienzoGuia.width, lienzoGuia.height
+        );
+
+        // Se mide sobre el mismo cuadro que viaja al detector, de modo que
+        // la nitidez corresponde a lo que el servidor está viendo.
+        nitidezActual = medirNitidez(lienzoGuia);
+        nitidezReferencia = Math.max(
+            nitidezActual, nitidezReferencia * DESVANECIDO_NITIDEZ
         );
 
         enviando = true;
@@ -552,6 +637,8 @@
             estables = 0;
             ultimoEncuadre = null;
             ultimaDeteccion = null;
+            nitidezActual = 0;
+            nitidezReferencia = 0;
             abrirCanal();
 
             showMessage(

@@ -11,8 +11,18 @@ import math
 import os
 import re
 
-MODELO = 'microsoft/trocr-small-handwritten'
+MODELO_POR_OMISION = 'microsoft/trocr-small-handwritten'
+# La revisión fija solo vale para el modelo de omisión: es su hash concreto en
+# el repositorio de origen, y aplicarlo a otro modelo haría fallar la carga.
 REVISION_MODELO = 'b4648cfa171985a6745f37ddd637e98c0da958ac'
+# El modelo de lectura se puede sustituir desde el entorno para comparar
+# alternativas sobre el mismo conjunto de fotografías sin tocar el código:
+#
+#     MODELO_LECTOR=microsoft/trocr-base-handwritten \
+#         python tools/medir_exactitud.py local_ocr/evaluacion_ocr
+#
+# Sin la variable se usa el de siempre, de modo que nada cambia por omisión.
+MODELO = os.environ.get('MODELO_LECTOR', '').strip() or MODELO_POR_OMISION
 MAX_BYTES = 5 * 1024 * 1024
 CAMPOS = ('operand_a', 'operand_b', 'written_result')
 RECORTES = ('operando_a', 'operando_b', 'resultado')
@@ -272,6 +282,116 @@ def _limpiar_fila_binaria(mask):
     return limpio[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
 
 
+# Longitud del núcleo de la apertura, en fracción del ancho del recorte. Un
+# núcleo plano no encaja en una raya inclinada: cuanto más largo, menos
+# inclinación tolera. Medido sobre recortes de ensayo, 0,5 pierde las rayas
+# con más de un grado de inclinación y 0,3 las recupera hasta cerca de dos,
+# sin marcar nada en recortes sin raya, ni siquiera con cifras de trazo
+# horizontal como el 7 o el 1.
+LARGO_NUCLEO_RAYA = 0.3
+# Anchura mínima que debe abarcar lo marcado, en fracción del recorte, para
+# aceptarlo como raya. Esta es la comprobación que impide confundirla con una
+# cifra: ningún número manuscrito abarca medio recorte de lado a lado.
+ANCHO_RAYA_MINIMO = 0.5
+# Altura máxima de lo marcado, en fracción del recorte. Una raya es fina; si
+# lo que sobrevive a la apertura ocupa buena parte del alto, no es una raya.
+ALTO_RAYA_MAXIMO = 0.3
+# No hay tope por cantidad de tinta, y es deliberado. En un recorte real la
+# raya cruza el ancho entero mientras que las cifras son unos pocos trazos,
+# así que la raya llega a ser la mayor parte de la tinta: medido sobre un
+# recorte de ejemplo, 956 de 1041 píxeles. Un tope por cantidad impedía
+# borrarla justo en los casos para los que se escribió esto. Lo que garantiza
+# que es una raya y no una cifra son las dos comprobaciones de forma de abajo,
+# junto con la apertura morfológica.
+
+
+def quitar_raya_activo():
+    """¿Hay que borrar la raya del recorte del segundo sumando?
+
+    Se lee del entorno en cada llamada para poder medir con y sin el arreglo
+    sobre el mismo conjunto de fotografías sin tocar el código:
+
+        python tools/medir_exactitud.py local_ocr/pruebas
+        QUITAR_RAYA=1 python tools/medir_exactitud.py local_ocr/pruebas
+
+    Apagado por omisión mientras no haya una medición que lo respalde.
+    """
+    return os.environ.get('QUITAR_RAYA', '0').strip() in ('1', 'true', 'True')
+
+
+def _quitar_raya_horizontal(recorte):
+    """Borrar la raya de la suma del recorte del segundo sumando.
+
+    El recorte del segundo sumando se corta por el borde inferior de su caja,
+    pero el detector suele incluir la raya dentro de esa caja, y el lector la
+    transcribe como un "1" pegado al número. Es la causa diagnosticada de la
+    mayor parte de los fallos de lectura.
+
+    Se aísla con una apertura morfológica de núcleo largo y plano: solo
+    sobreviven las estructuras continuas en horizontal. Una cifra manuscrita
+    nunca lo es, por muy ancha que sea, porque sus trazos se interrumpen. Ahí
+    está la diferencia con el intento anterior, que buscaba líneas por toda la
+    imagen y acababa marcando tinta de las cifras.
+
+    Si aun así lo marcado resulta ser demasiada tinta, se devuelve el recorte
+    sin tocar: es preferible una lectura como la de hoy a una que borre cifras.
+    """
+    import cv2
+    import numpy as np
+    from PIL import Image
+
+    gris = np.asarray(recorte.convert('L'))
+    alto, ancho = gris.shape
+    if ancho < 30 or alto < 12:
+        return recorte
+
+    # Tinta en blanco sobre fondo negro, que es lo que esperan las operaciones
+    # morfológicas de OpenCV.
+    _, tinta = cv2.threshold(gris, 0, 255,
+                             cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    if not np.any(tinta):
+        return recorte
+
+    largo = max(15, int(ancho * LARGO_NUCLEO_RAYA))
+    nucleo = cv2.getStructuringElement(cv2.MORPH_RECT, (largo, 1))
+    rayas = cv2.morphologyEx(tinta, cv2.MORPH_OPEN, nucleo)
+    if not np.any(rayas):
+        return recorte
+
+    # Comprobar que lo detectado tiene forma de raya: ancho y fino. Es mejor
+    # defensa que un tope de cantidad, porque describe lo que se busca en
+    # lugar de cuánto se permite borrar.
+    #
+    # Las tres comprobaciones se hacen sobre la raya tal como la encontró la
+    # apertura, antes de engordarla. Engordar añade píxeles a propósito, así
+    # que medir después contaría ese relleno como si fuera tinta de la raya.
+    filas = np.flatnonzero(np.any(rayas > 0, axis=1))
+    columnas = np.flatnonzero(np.any(rayas > 0, axis=0))
+    if filas.size == 0 or columnas.size == 0:
+        return recorte
+    alto_marcado = filas[-1] - filas[0] + 1
+    ancho_marcado = columnas[-1] - columnas[0] + 1
+    if alto_marcado > alto * ALTO_RAYA_MAXIMO:
+        return recorte
+    if ancho_marcado < ancho * ANCHO_RAYA_MINIMO:
+        return recorte
+
+    # Ya decidido que es una raya, se borra su rectángulo completo y no solo
+    # los píxeles que superaron el umbral. Los extremos de un trazo a bolígrafo
+    # se difuminan contra el papel y quedan por debajo del umbral, pero el
+    # lector sí los ve: borrar píxel a píxel dejaba esas colas y con ellas el
+    # trazo que se transcribe como un "1".
+    margen_x = max(2, ancho // 25)
+    y1 = max(0, filas[0] - 2)
+    y2 = min(alto, filas[-1] + 3)
+    x1 = max(0, columnas[0] - margen_x)
+    x2 = min(ancho, columnas[-1] + margen_x + 1)
+
+    limpio = np.asarray(recorte.convert('RGB')).copy()
+    limpio[y1:y2, x1:x2] = 255
+    return Image.fromarray(limpio)
+
+
 def _recortes_con_contraste(imagen, cajas):
     """Conservar trazos tenues que la máscara puede perder al segmentar."""
     from PIL import ImageOps
@@ -294,6 +414,8 @@ def _recortes_con_contraste(imagen, cajas):
         caja = [max(0, x1 - margen), superior,
                 min(imagen.width, x2 + margen), inferior]
         recorte = _normalizar_iluminacion_fila(imagen.crop(caja))
+        if nombre == 'operando_b' and quitar_raya_activo():
+            recorte = _quitar_raya_horizontal(recorte)
         recortes[nombre] = ImageOps.expand(recorte, border=15, fill='white').convert('RGB')
         ampliadas[nombre] = caja
     return recortes, ampliadas
@@ -322,7 +444,7 @@ def cargar_modelo(modelo=MODELO, local_files_only=False):
 
     torch.set_num_threads(min(4, os.cpu_count() or 1))
     opciones = {'local_files_only': local_files_only}
-    if modelo == MODELO:
+    if modelo == MODELO_POR_OMISION:
         opciones['revision'] = REVISION_MODELO
     procesador = TrOCRProcessor.from_pretrained(modelo, use_fast=False, **opciones)
     reconocedor = VisionEncoderDecoderModel.from_pretrained(
