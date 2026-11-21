@@ -3,6 +3,7 @@
 No recibe el ejercicio esperado ni calcula su respuesta. La web procesa la foto
 en memoria. El modelo se carga una vez por proceso y las inferencias se serializan.
 """
+import logging
 from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
@@ -10,6 +11,8 @@ from threading import Lock
 import math
 import os
 import re
+
+logger = logging.getLogger(__name__)
 
 MODELO_POR_OMISION = 'microsoft/trocr-small-handwritten'
 # La revisión fija solo vale para el modelo de omisión: es su hash concreto en
@@ -111,21 +114,27 @@ def preparar_suma(fotografia, usar_detector=True):
             try:
                 return _separar_suma(imagen, 15, 8, 220, limpiar_fondo=True)
             except PhotoNotReadable:
-                # Último recurso: el detector entrenado solo interviene cuando
-                # OpenCV ya no pudo separar la hoja. Así nunca empeora una
-                # fotografía que el método actual resuelve bien. Sin modelo
-                # entrenado devuelve None y se conserva el aviso original.
+                # El detector entrenado solo interviene cuando OpenCV ya no
+                # pudo separar la hoja. Así nunca empeora una fotografía que
+                # el método actual resuelve bien. Sin modelo entrenado
+                # devuelve None y se conserva el aviso original.
                 if usar_detector:
                     from .yolo_segmentation import separar_con_yolo
 
                     deteccion = separar_con_yolo(imagen)
                     if deteccion is not None:
                         return deteccion
-                raise
+                # Agotado todo lo anterior, admitir que el signo + esté
+                # dibujado alto, pegado a la primera fila. Va el último a
+                # propósito: rescatar una fotografía antes de tiempo le quita
+                # los intentos siguientes, que suelen separarla mejor. Puesto
+                # aquí no puede tocar ninguna fotografía que los demás
+                # caminos ya resolvían.
+                return _separar_suma(imagen, 35, 15, 190, signo_alto=True)
 
 
 def _separar_suma(imagen, contraste_rojo, contraste_verde, rojo_maximo,
-                  recortar=False, limpiar_fondo=False):
+                  recortar=False, limpiar_fondo=False, signo_alto=False):
     import cv2
     import numpy as np
     from PIL import Image
@@ -189,22 +198,59 @@ def _separar_suma(imagen, contraste_rojo, contraste_verde, rojo_maximo,
     _, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
     superior = int(np.where(mask)[0].min())
     corte_superior = superior + (inicio - superior) * .25
-    signos = []
-    for indice, (x, y, w, h, area) in enumerate(stats[1:], 1):
-        margen_linea = max(20, int(.06 * longitud)) if recortar else 2
-        if area < 30 or y <= corte_superior or y + h > inicio + margen_linea:
-            continue
-        if recortar and x >= min(linea[0], linea[2]):
-            continue
-        if not .4 <= w / h <= 1.8:
-            continue
-        pieza = labels[y:y + h, x:x + w] == indice
-        horizontal = pieza.sum(axis=1)
-        vertical = pieza.sum(axis=0)
-        if (horizontal.max() >= .65 * w and vertical.max() >= .65 * h
-                and .15 * h <= horizontal.argmax() <= .85 * h
-                and .15 * w <= vertical.argmax() <= .85 * w):
-            signos.append((int(x), indice))
+    def buscar_signos(mask, labels, stats):
+        """Recoger los componentes que tienen forma de cruz."""
+        encontrados = []
+        for indice, (x, y, w, h, area) in enumerate(stats[1:], 1):
+            margen_linea = max(20, int(.06 * longitud)) if recortar else 2
+            if area < 30 or y <= corte_superior or y + h > inicio + margen_linea:
+                continue
+            if recortar and x >= min(linea[0], linea[2]):
+                continue
+            if not .4 <= w / h <= 1.8:
+                continue
+            pieza = labels[y:y + h, x:x + w] == indice
+            horizontal = pieza.sum(axis=1)
+            vertical = pieza.sum(axis=0)
+            if (horizontal.max() >= .65 * w and vertical.max() >= .65 * h
+                    and .15 * h <= horizontal.argmax() <= .85 * h
+                    and .15 * w <= vertical.argmax() <= .85 * w):
+                encontrados.append((int(x), indice))
+        return encontrados
+
+    signos = buscar_signos(mask, labels, stats)
+    if signo_alto and not signos:
+        # El corte de altura deja fuera el signo + cuando se dibuja alto,
+        # pegado a la primera fila. Se vuelve a mirar sin ese corte, pero
+        # exigiendo que la pieza esté sola a la izquierda de todas las demás:
+        # una cifra nunca lo está, porque el propio signo queda más a su
+        # izquierda.
+        #
+        # Esto solo se activa en el último intento de preparar_suma, nunca en
+        # el primero. Rendirse aquí no es un fallo: deja que los intentos
+        # siguientes, con la máscara tenue o el fondo limpio, separen la
+        # fotografía, y suelen hacerlo mejor. Cuando esta búsqueda formaba
+        # parte del primer intento, las rescataba con una separación peor y
+        # les quitaba esa oportunidad.
+        for indice, (x, y, w, h, area) in enumerate(stats[1:], 1):
+            if area < 30 or not .4 <= w / h <= 1.8:
+                continue
+            if y + h > inicio:
+                continue
+            if recortar and x >= min(linea[0], linea[2]):
+                continue
+            pieza = labels[y:y + h, x:x + w] == indice
+            horizontal = pieza.sum(axis=1)
+            vertical = pieza.sum(axis=0)
+            if not (horizontal.max() >= .65 * w and vertical.max() >= .65 * h
+                    and .15 * h <= horizontal.argmax() <= .85 * h
+                    and .15 * w <= vertical.argmax() <= .85 * w):
+                continue
+            otros = [int(ox) for oi, (ox, oy, ow, oh, oa) in
+                     enumerate(stats[1:], 1)
+                     if oi != indice and oa >= 30 and oy + oh <= inicio]
+            if otros and x + w <= min(otros):
+                signos.append((int(x), indice))
     if not signos:
         raise PhotoNotReadable('No pude aislar el signo +. Usa una sola suma vertical clara.')
     indice_signo = min(signos)[1]
@@ -501,10 +547,46 @@ def reconocer_recortes(recortes, modelo=MODELO, *, local_files_only=False,
         _inference_lock.release()
 
 
+def lector_de_digitos_activo():
+    """¿Hay que leer cifra a cifra en vez de transcribir la fila como texto?
+
+    Apagado por omisión y, además, condicionado a que exista el archivo del
+    clasificador: un compañero sin el modelo entrenado conserva el
+    comportamiento de siempre sin tocar nada.
+
+        LECTOR_DIGITOS=1 python tools/medir_exactitud.py local_ocr/prueba_a4
+    """
+    if os.environ.get('LECTOR_DIGITOS', '0').strip() not in ('1', 'true', 'True'):
+        return False
+    from .digitos import modelo_disponible
+
+    return modelo_disponible()
+
+
+def _leer_con_digitos(imagen, cajas):
+    """Transcribir clasificando cada cifra por separado.
+
+    Devuelve la misma forma que reconocer_recortes para que el resto del
+    aplicativo no note la diferencia.
+    """
+    from .digitos import leer_filas
+
+    textos, _ = leer_filas(imagen, cajas, RECORTES)
+    crudas = {CAMPOS[i]: textos[RECORTES[i]] for i in range(len(CAMPOS))}
+    propuesta = normalizar_lecturas(crudas)
+    completa = all(v is not None for v in propuesta.values())
+    return {
+        'estado': 'pendiente_de_confirmacion' if completa else 'lectura_incompleta',
+        'source': 'clasificador-digitos',
+        'propuesta': propuesta,
+        'lecturas_crudas': crudas,
+    }
+
+
 def leer_fotografia(fotografia, modelo=MODELO, *, incluir_diagnostico=False):
     """Usar únicamente el modelo ya descargado; la web no inicia descargas."""
     try:
-        _, _, recortes, _, _ = preparar_suma(fotografia)
+        imagen, _, recortes, cajas, _ = preparar_suma(fotografia)
     except PhotoNotReadable as exc:
         return {
             'estado': 'lectura_pendiente',
@@ -517,7 +599,18 @@ def leer_fotografia(fotografia, modelo=MODELO, *, incluir_diagnostico=False):
     except ImportError as exc:
         raise ReaderUnavailable('Faltan las dependencias de preparación de imágenes.') from exc
 
-    lectura = reconocer_recortes(recortes, modelo, local_files_only=True, esperar=False)
+    if lector_de_digitos_activo():
+        try:
+            lectura = _leer_con_digitos(imagen, cajas)
+        except Exception:
+            # Si el clasificador falla por cualquier motivo, la lectura sigue
+            # por el camino de siempre en lugar de dejar al estudiante sin nada.
+            logger.exception('Falló el lector de cifras; se usa el lector de texto')
+            lectura = reconocer_recortes(recortes, modelo, local_files_only=True,
+                                         esperar=False)
+    else:
+        lectura = reconocer_recortes(recortes, modelo, local_files_only=True,
+                                     esperar=False)
     if not incluir_diagnostico:
         lectura.pop('lecturas_crudas')
     lectura['etapa'] = 'reconocimiento'
