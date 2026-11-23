@@ -212,3 +212,18 @@ class EleccionDeVistaTests(SimpleTestCase):
                 patch.object(digitos, '_leer_vista', side_effect=[flojo, flojo]):
             textos, _ = digitos.leer_filas(None, {}, nombres)
         self.assertEqual(textos, dict.fromkeys(nombres, ''))
+
+
+class SolapadasTests(SimpleTestCase):
+    """Los trozos de una misma cifra rota se vuelven a unir."""
+
+    def test_un_siete_con_la_raya_suelta_es_una_sola_cifra(self):
+        # El palo y la raya cruzada del 7 quedaron en dos piezas solapadas.
+        piezas = [(10, 5, 30, 60), (100, 5, 90, 60), (120, 30, 100, 10)]
+        unidas = digitos.unir_solapadas(piezas)
+        self.assertEqual(len(unidas), 2)
+        self.assertEqual(unidas[1], (100, 5, 120, 60))
+
+    def test_dos_cifras_una_al_lado_de_la_otra_no_se_unen(self):
+        piezas = [(10, 5, 40, 60), (55, 5, 40, 60), (100, 5, 40, 60)]
+        self.assertEqual(digitos.unir_solapadas(piezas), piezas)

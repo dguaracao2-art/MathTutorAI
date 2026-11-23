@@ -41,6 +41,9 @@ TOLERANCIA_COLUMNA = 0.7
 # por la raya de la suma o una línea de la cuadrícula y no por parte de una
 # cifra.
 LARGO_RAYA = 1.2
+# Fracción de la pieza más estrecha que tienen que solaparse en horizontal
+# dos piezas de una fila para tomarlas por trozos de la misma cifra.
+SOLAPE_MISMA_CIFRA = 0.5
 # Distancia máxima entre dos centros, en alturas de cifra, para considerarlos
 # la misma columna de la suma.
 TOLERANCIA_AGRUPAR = 0.45
@@ -333,9 +336,35 @@ def unir_partidas(cajas, columnas, altura):
     return salida
 
 
+def unir_solapadas(cajas):
+    """Unir piezas de una misma fila que están una encima de la otra.
+
+    Dos cifras distintas de una fila nunca se solapan en horizontal: van una
+    al lado de la otra. Cuando dos piezas sí lo hacen, son una sola cifra que
+    se rompió al binarizar, como un 7 con raya cruzada cuya raya queda
+    suelta del palo; sin unirlas, cada trozo se lee como un 1 y "37" sale
+    "311". A diferencia de unir_partidas, esto no depende de las columnas, así
+    que vale también para el resultado.
+    """
+    salida = []
+    for caja in sorted(cajas, key=lambda c: c[0]):
+        if salida:
+            x, y, w, h = salida[-1][:4]
+            cx, cy, cw, ch = caja[:4]
+            solape = min(x + w, cx + cw) - max(x, cx)
+            if solape > SOLAPE_MISMA_CIFRA * min(w, cw):
+                x1, y1 = min(x, cx), min(y, cy)
+                x2, y2 = max(x + w, cx + cw), max(y + h, cy + ch)
+                salida[-1] = (x1, y1, x2 - x1, y2 - y1)
+                continue
+        salida.append(caja)
+    return salida
+
+
 def separar_cifras(gris, cajas_de_fila, nombres):
     """Separar las tres filas en cifras sueltas, ya sin el signo +."""
-    por_fila = {n: componentes_de(gris, cajas_de_fila[n]) for n in nombres}
+    por_fila = {n: unir_solapadas(componentes_de(gris, cajas_de_fila[n]))
+                for n in nombres}
     referencia = [por_fila[n] for n in nombres if n != 'operando_b']
     if 'operando_b' in por_fila:
         por_fila['operando_b'] = sin_signo_mas(por_fila['operando_b'], referencia)
