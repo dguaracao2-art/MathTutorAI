@@ -24,8 +24,16 @@ def _calentar_lector():
     está disponible, la lectura informará del problema como siempre.
     """
     try:
-        from .services.handwriting import cargar_modelo
+        from .services.handwriting import cargar_modelo, lector_de_digitos_activo
 
+        if lector_de_digitos_activo():
+            # Con el lector de cifras se calienta su red, que es la que va a
+            # leer. TrOCR se sigue cargando como respaldo, porque es lo que se
+            # usa si el clasificador falla con una fotografía concreta.
+            from .services.digitos import cargar_clasificador
+
+            cargar_clasificador()
+            logger.info("Lector de cifras cargado y listo.")
         cargar_modelo()
         logger.info("Lector de escritura cargado y listo.")
     except Exception:

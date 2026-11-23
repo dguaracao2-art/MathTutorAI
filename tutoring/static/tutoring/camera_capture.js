@@ -50,6 +50,14 @@
     // fotografía definitiva, en fracción del tamaño de esas filas. Deja aire
     // para los trazos que sobresalgan del borde de una caja.
     const MARGEN_RECORTE = 0.08;
+    // Por la izquierda hace falta mucho más aire. Lo detectado son las filas
+    // de cifras, y el signo + queda fuera de ellas, a su izquierda: con el
+    // margen corriente el recorte lo parte por la mitad. El lector necesita
+    // el signo entero para separar las filas, y medio signo pegado a la
+    // primera cifra se lee como una cifra equivocada. Sobre las capturas de
+    // ensayo, dar aire por la izquierda arregló una lectura completa y subió
+    // la confianza del segundo sumando de 0,50 a 0,97 en otra.
+    const MARGEN_IZQUIERDO = 0.30;
     // Cuánto vale una detección para recortar con ella. Pasado ese tiempo la
     // hoja pudo moverse y se vuelve a capturar el marco entero.
     const VIGENCIA_DETECCION = 1500;
@@ -144,7 +152,7 @@
 
         const margenX = ancho * MARGEN_RECORTE;
         const margenY = alto * MARGEN_RECORTE;
-        const x1 = Math.max(0, area.x1 - margenX);
+        const x1 = Math.max(0, area.x1 - ancho * MARGEN_IZQUIERDO);
         const y1 = Math.max(0, area.y1 - margenY);
         const x2 = Math.min(1, area.x2 + margenX);
         const y2 = Math.min(1, area.y2 + margenY);

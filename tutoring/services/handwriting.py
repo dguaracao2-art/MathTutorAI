@@ -547,16 +547,39 @@ def reconocer_recortes(recortes, modelo=MODELO, *, local_files_only=False,
         _inference_lock.release()
 
 
+def _interruptor_digitos():
+    """Valor de LECTOR_DIGITOS, del entorno o, si no está, del archivo .env.
+
+    El resto de la configuración del proyecto se lee con decouple, que mira el
+    archivo .env. Leer este interruptor solo del entorno era una trampa: una
+    línea en el .env no hacía nada, y un servidor recién arrancado leía con el
+    lector antiguo sin que nadie lo notara.
+    """
+    valor = os.environ.get('LECTOR_DIGITOS')
+    if valor is None:
+        try:
+            from decouple import config
+
+            valor = config('LECTOR_DIGITOS', default='')
+        except Exception:
+            valor = ''
+    return str(valor).strip().lower()
+
+
 def lector_de_digitos_activo():
     """¿Hay que leer cifra a cifra en vez de transcribir la fila como texto?
 
-    Apagado por omisión y, además, condicionado a que exista el archivo del
-    clasificador: un compañero sin el modelo entrenado conserva el
-    comportamiento de siempre sin tocar nada.
+    Encendido siempre que exista el modelo entrenado. Un compañero que no lo
+    tenga conserva el lector de siempre sin tocar nada, que era la garantía
+    que se buscaba; y desplegar consiste en copiar el archivo del modelo, sin
+    una variable de más que se pueda olvidar.
 
-        LECTOR_DIGITOS=1 python tools/medir_exactitud.py local_ocr/prueba_a4
+    Para medir el lector antiguo sobre las mismas fotografías se apaga a
+    propósito:
+
+        LECTOR_DIGITOS=0 python tools/medir_exactitud.py local_ocr/evaluacion_ocr
     """
-    if os.environ.get('LECTOR_DIGITOS', '0').strip() not in ('1', 'true', 'True'):
+    if _interruptor_digitos() in ('0', 'false', 'no', 'off'):
         return False
     from .digitos import modelo_disponible
 

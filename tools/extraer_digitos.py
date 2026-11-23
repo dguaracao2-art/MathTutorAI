@@ -67,12 +67,9 @@ def main():
                                  'local_ocr/digitos.')
     argumentos = analizador.parse_args()
 
-    import numpy as np
     from PIL import Image
 
-    from tutoring.services.digitos import (
-        componentes_de, normalizar, separar_cifras,
-    )
+    from tutoring.services.digitos import normalizar, separar_cifras, vistas_de
     from tutoring.services.handwriting import RECORTES, preparar_suma
 
     esperado = referencia_de(argumentos.carpeta)
@@ -98,21 +95,23 @@ def main():
             print(f'  {foto.name}: no se pudo separar ({exc})')
             continue
 
-        gris = np.asarray(imagen.convert('L'))
-        por_fila = separar_cifras(gris, cajas, RECORTES)
+        # Se extrae de las dos imágenes sobre las que lee el aplicativo, la
+        # de tinta y la de brillo, para que la red aprenda las dos.
+        for vista, gris in enumerate(vistas_de(imagen)):
+            por_fila = separar_cifras(gris, cajas, RECORTES)
 
-        for nombre in RECORTES:
-            etiquetas = solo_digitos(esperado[foto.name][CAMPO_DE[nombre]])
-            encontradas = por_fila[nombre]
-            if not etiquetas or len(encontradas) != len(etiquetas):
-                filas_descartadas += 1
-                continue
-            for posicion, (caja, digito) in enumerate(zip(encontradas, etiquetas)):
-                imagen_digito = Image.fromarray(normalizar(gris, caja))
-                nombre_archivo = f'{foto.stem}_{nombre}_{posicion}.png'
-                imagen_digito.save(destino / digito / nombre_archivo)
-                cuenta[digito] += 1
-            filas_usadas += 1
+            for nombre in RECORTES:
+                etiquetas = solo_digitos(esperado[foto.name][CAMPO_DE[nombre]])
+                encontradas = por_fila[nombre]
+                if not etiquetas or len(encontradas) != len(etiquetas):
+                    filas_descartadas += 1
+                    continue
+                for posicion, (caja, digito) in enumerate(zip(encontradas, etiquetas)):
+                    imagen_digito = Image.fromarray(normalizar(gris, caja))
+                    nombre_archivo = f'{foto.stem}_{nombre}_{posicion}_v{vista}.png'
+                    imagen_digito.save(destino / digito / nombre_archivo)
+                    cuenta[digito] += 1
+                filas_usadas += 1
 
         print(f'  {indice}/{len(fotos)} {foto.name}', flush=True)
 

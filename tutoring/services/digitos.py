@@ -37,9 +37,13 @@ AREA_MINIMA = 30
 # Distancia máxima al centro de una columna, en anchuras de cifra, para
 # aceptar que una componente del segundo sumando es una cifra y no el signo.
 TOLERANCIA_COLUMNA = 0.7
+# Largo mínimo de un trazo horizontal, en alturas de la fila, para tomarlo
+# por la raya de la suma o una línea de la cuadrícula y no por parte de una
+# cifra.
+LARGO_RAYA = 1.2
 # Distancia máxima entre dos centros, en alturas de cifra, para considerarlos
 # la misma columna de la suma.
-TOLERANCIA_AGRUPAR = float(os.environ.get('P_AGRUPAR', '0.45'))
+TOLERANCIA_AGRUPAR = 0.45
 # Confianza mínima media para dar por buena la lectura de una fila.
 CONFIANZA_MINIMA = float(os.environ.get('CONFIANZA_DIGITOS', '0.55'))
 
@@ -95,6 +99,34 @@ def cargar_clasificador(ruta=None):
     return red
 
 
+def sin_trazos_largos(binaria, alto):
+    """Borrar de la fila los trazos horizontales más largos que una cifra.
+
+    La raya de la suma suele tocar la parte de abajo del segundo sumando, y
+    con ella las cifras y la raya forman una sola pieza ancha. Separarla
+    después a base de cortes acaba partiendo por sitios que no son fronteras
+    de cifra. Es mejor quitar la raya antes de etiquetar.
+
+    Lo que distingue la raya de una cifra es la longitud: ningún trazo
+    horizontal de una cifra (la barra del 7, el pie del 2, la del 4) es más
+    largo que la propia altura de la cifra, y la raya de la suma lo es con
+    mucho. Una apertura con un núcleo plano más largo que esa altura deja
+    solo lo que es horizontal y largo; eso se resta y el resto queda intacto.
+    También se lleva las líneas horizontales de la cuadrícula que hayan
+    pasado el umbral.
+    """
+    import cv2
+
+    # Longitud impar: con un núcleo par OpenCV desplaza el ancla un píxel y
+    # la raya se resta con una columna de menos en un extremo.
+    largo = max(15, int(round(alto * LARGO_RAYA))) | 1
+    if largo >= binaria.shape[1]:
+        return binaria
+    nucleo = cv2.getStructuringElement(cv2.MORPH_RECT, (largo, 1))
+    rayas = cv2.morphologyEx(binaria, cv2.MORPH_OPEN, nucleo)
+    return cv2.subtract(binaria, rayas)
+
+
 def componentes_de(gris, caja):
     """Componentes conexas dentro de una caja, en coordenadas de la imagen.
 
@@ -109,8 +141,9 @@ def componentes_de(gris, caja):
         return []
     _, binaria = cv2.threshold(recorte, 0, 255,
                                cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-    cantidad, _, stats, _ = cv2.connectedComponentsWithStats(binaria, 8)
     alto, ancho = recorte.shape
+    binaria = sin_trazos_largos(binaria, alto)
+    cantidad, _, stats, _ = cv2.connectedComponentsWithStats(binaria, 8)
     cajas = []
     for indice in range(1, cantidad):
         x, y, w, h, area = stats[indice]
@@ -344,36 +377,100 @@ def _recortar_resultado(por_fila, nombres):
         por_fila[resultado] = por_fila[resultado][sobran:]
 
 
-def leer_filas(imagen, cajas_de_fila, nombres, ruta=None):
-    """Transcribir las tres filas clasificando cada cifra por separado.
+def imagen_de_tinta(imagen):
+    """Imagen en la que solo la tinta azul es oscura.
 
-    Devuelve un diccionario de textos y otro de confianzas medias por fila.
-    Una fila cuya confianza media no llegue al mínimo se devuelve vacía: es
-    preferible que el estudiante complete el campo en la pantalla de
-    confirmación a que el sistema proponga una cifra inventada.
+    Hasta ahora las cifras se separaban binarizando la luminancia, y en la
+    luminancia la sombra de una hoja y las líneas de la cuadrícula se parecen
+    a la tinta: en las capturas de cámara, la sombra entre "1", "0" y "4"
+    contaba como trazo y las tres cifras salían como una sola pieza.
+
+    Lo que distingue la tinta es el color. Una sombra o una línea gris tienen
+    el rojo, el verde y el azul parecidos; la tinta azul tiene mucho más azul
+    que lo demás. Se toma, por eso, cuánto supera el azul al mayor de los
+    otros dos canales, y se invierte para que la tinta quede oscura sobre
+    fondo claro, como espera el resto del código. El aplicativo ya exige
+    bolígrafo azul para encontrar las filas, así que esto no añade ninguna
+    condición nueva.
+
+    La usa tanto la lectura como la extracción de cifras para entrenar, para
+    que la red aprenda con los mismos recortes que luego va a ver.
+    """
+    import numpy as np
+
+    rgb = np.asarray(imagen.convert('RGB')).astype(np.int16)
+    azul = rgb[:, :, 2] - np.maximum(rgb[:, :, 0], rgb[:, :, 1])
+    azul = np.clip(azul, 0, None).astype(np.float32)
+    techo = float(np.percentile(azul, 99.5)) if azul.size else 0.0
+    if techo <= 0:
+        return np.asarray(imagen.convert('L'))
+    escalada = np.clip(azul * (255.0 / techo), 0, 255)
+    return (255 - escalada).astype(np.uint8)
+
+
+def _leer_vista(red, gris, cajas_de_fila, nombres):
+    """Leer las tres filas sobre una de las dos imágenes de la fotografía.
+
+    Devuelve, por fila, el texto propuesto, la confianza media y la de la
+    cifra más dudosa.
     """
     import numpy as np
     import torch
 
-    red = cargar_clasificador(ruta)
-    gris = np.asarray(imagen.convert('L'))
     por_fila = separar_cifras(gris, cajas_de_fila, nombres)
     _recortar_resultado(por_fila, nombres)
-
-    textos, confianzas = {}, {}
+    lecturas = {}
     for nombre in nombres:
         cifras = por_fila[nombre]
         if not cifras:
-            textos[nombre] = ''
-            confianzas[nombre] = 0.0
+            lecturas[nombre] = ('', 0.0, 0.0)
             continue
         lote = np.stack([normalizar(gris, c) for c in cifras])
         tensor = torch.from_numpy(lote.astype(np.float32) / 255.0).unsqueeze(1)
         with torch.inference_mode():
             salida = torch.softmax(red(tensor), dim=1)
         probabilidad, clase = salida.max(dim=1)
-        media = float(probabilidad.mean())
+        texto = ''.join(str(int(c)) for c in clase)
+        lecturas[nombre] = (texto, float(probabilidad.mean()),
+                            float(probabilidad.min()))
+    return lecturas
+
+
+def vistas_de(imagen):
+    """Las dos imágenes sobre las que se lee: la de tinta azul y la de brillo.
+
+    Cada una acierta donde la otra falla. La de tinta borra sombras y
+    cuadrícula y es mejor con las fotografías de un móvil; la de brillo
+    aguanta mejor el color pobre de la cámara de un portátil. Medido con tres
+    entrenamientos distintos: con la de tinta, 47 de 50 en RNF-02 y entre 6 y
+    8 de 19 capturas de portátil; con la de brillo, 42 de 50 y entre 8 y 9.
+    """
+    import numpy as np
+
+    return [imagen_de_tinta(imagen), np.asarray(imagen.convert('L'))]
+
+
+def leer_filas(imagen, cajas_de_fila, nombres, ruta=None):
+    """Transcribir las tres filas clasificando cada cifra por separado.
+
+    Se lee la fotografía sobre las dos imágenes de vistas_de y, fila a fila,
+    se queda la lectura en la que la red está más segura de su cifra más
+    dudosa. Mirar la cifra más dudosa y no la media evita preferir una fila
+    con tres cifras claras y una inventada.
+
+    Devuelve un diccionario de textos y otro de confianzas medias por fila.
+    Una fila cuya confianza media no llegue al mínimo se devuelve vacía: es
+    preferible que el estudiante complete el campo en la pantalla de
+    confirmación a que el sistema proponga una cifra inventada.
+    """
+    red = cargar_clasificador(ruta)
+    por_vista = [_leer_vista(red, gris, cajas_de_fila, nombres)
+                 for gris in vistas_de(imagen)]
+
+    textos, confianzas = {}, {}
+    for nombre in nombres:
+        texto, media, _ = max((v[nombre] for v in por_vista),
+                              key=lambda lectura: lectura[2])
         confianzas[nombre] = media
-        textos[nombre] = ('' if media < CONFIANZA_MINIMA
-                          else ''.join(str(int(c)) for c in clase))
+        textos[nombre] = texto if texto and media >= CONFIANZA_MINIMA else ''
     return textos, confianzas
