@@ -224,6 +224,39 @@ class SolapadasTests(SimpleTestCase):
         self.assertEqual(len(unidas), 2)
         self.assertEqual(unidas[1], (100, 5, 120, 60))
 
+    def test_una_cifra_de_raya_larga_no_se_traga_a_la_vecina(self):
+        # La caja del 4 se estira por encima del 6: la del 6 queda entera
+        # debajo, pero no son la misma cifra.
+        piezas = [(10, 5, 100, 60), (80, 5, 30, 60)]
+        self.assertEqual(len(digitos.unir_solapadas(piezas)), 2)
+
     def test_dos_cifras_una_al_lado_de_la_otra_no_se_unen(self):
         piezas = [(10, 5, 40, 60), (55, 5, 40, 60), (100, 5, 40, 60)]
         self.assertEqual(digitos.unir_solapadas(piezas), piezas)
+
+
+class SignoPegadoTests(SimpleTestCase):
+    """El signo + pegado a la primera cifra se corta; un 4 no se toca."""
+
+    def _gris(self, dibujar):
+        imagen = Image.new('L', (90, 90), 255)
+        dibujar(ImageDraw.Draw(imagen))
+        return np.asarray(imagen)
+
+    def test_un_mas_pegado_a_un_uno_se_corta(self):
+        def dibujar(lapiz):
+            lapiz.rectangle([10, 39, 50, 42], fill=0)   # brazo del +
+            lapiz.rectangle([28, 25, 31, 55], fill=0)   # palo del +
+            lapiz.rectangle([50, 5, 55, 75], fill=0)    # el 1
+        piezas = digitos.sin_signo_pegado(self._gris(dibujar), [(10, 5, 46, 71)])
+        x, _, w, _ = piezas[0]
+        self.assertGreaterEqual(x, 45)
+        self.assertLessEqual(w, 12)
+
+    def test_un_cuatro_no_se_corta(self):
+        def dibujar(lapiz):
+            lapiz.line([(40, 5), (10, 50)], fill=0, width=4)   # diagonal
+            lapiz.rectangle([10, 49, 60, 52], fill=0)          # barra
+            lapiz.rectangle([45, 5, 50, 75], fill=0)           # palo
+        piezas = [(8, 5, 54, 71)]
+        self.assertEqual(digitos.sin_signo_pegado(self._gris(dibujar), piezas), piezas)

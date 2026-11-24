@@ -41,9 +41,15 @@ TOLERANCIA_COLUMNA = 0.7
 # por la raya de la suma o una línea de la cuadrícula y no por parte de una
 # cifra.
 LARGO_RAYA = 1.2
-# Fracción de la pieza más estrecha que tienen que solaparse en horizontal
+# Fracción de la pieza más ancha que tienen que solaparse en horizontal
 # dos piezas de una fila para tomarlas por trozos de la misma cifra.
 SOLAPE_MISMA_CIFRA = 0.5
+# Forma del signo + pegado a la primera cifra, en fracciones de la altura de
+# la pieza: el brazo ocupa menos que BRAZO_MAXIMO, el palo del signo al menos
+# PALO_SIGNO, y la cifra que hay a la derecha al menos ALTURA_CIFRA_PEGADA.
+BRAZO_MAXIMO = 0.2
+PALO_SIGNO = 0.35
+ALTURA_CIFRA_PEGADA = 0.6
 # Distancia máxima entre dos centros, en alturas de cifra, para considerarlos
 # la misma columna de la suma.
 TOLERANCIA_AGRUPAR = 0.45
@@ -158,6 +164,84 @@ def componentes_de(gris, caja):
         cajas.append((x1 + x, y1 + y, w, h))
     cajas.sort(key=lambda c: c[0])
     return cajas
+
+
+def _es_cruz(tinta, desde, hasta, alto):
+    """¿Lo que hay a la izquierda del brazo es un signo +?
+
+    Un 4 tiene la misma silueta que un "+1" pegado: un trazo a la izquierda,
+    una barra fina y un palo a la derecha. Lo que los separa es la cruz. El
+    brazo de un + está a media altura y su palo sobresale tanto por encima
+    como por debajo de él; el trazo izquierdo de un 4 solo sube desde su
+    barra, y la barra de un 2 está abajo del todo.
+    """
+    import numpy as np
+
+    filas_brazo = np.flatnonzero(tinta[:, desde:hasta].any(axis=1))
+    if filas_brazo.size == 0:
+        return False
+    brazo = float(filas_brazo.mean())
+    if not alto * .25 <= brazo <= alto * .75:
+        return False
+    filas_palo = np.flatnonzero(tinta[:, :desde].any(axis=1))
+    if filas_palo.size == 0:
+        return False
+    margen = alto * .12
+    return bool(filas_palo.min() < brazo - margen and filas_palo.max() > brazo + margen)
+
+
+def sin_signo_pegado(gris, cajas_b):
+    """Quitar el signo + cuando su brazo quedó pegado a la primera cifra.
+
+    Si el brazo derecho del signo llega a tocar la primera cifra del segundo
+    sumando, los dos forman una sola mancha de tinta y la red lee un "+1"
+    como un 4: en las fotografías de ensayo pasaba igual en hoja blanca que
+    en las capturas de cámara.
+
+    La unión tiene una forma muy concreta. Entre el signo y la cifra solo
+    queda el brazo, unas columnas en las que la tinta ocupa una rayita de
+    altura; a su izquierda está el palo del signo, que ocupa buena parte de
+    la altura, y a su derecha la cifra, que la ocupa casi entera. Se busca
+    esa rayita en la primera pieza y se corta en su extremo derecho. Una
+    cifra suelta no tiene a su izquierda un trazo alto seguido de una rayita,
+    así que no se toca.
+    """
+    import cv2
+    import numpy as np
+
+    if not cajas_b:
+        return cajas_b
+    x, y, w, h = cajas_b[0][:4]
+    if h <= 0 or w < h * 0.6:
+        return cajas_b
+    recorte = gris[y:y + h, x:x + w]
+    if recorte.size == 0:
+        return cajas_b
+    _, binaria = cv2.threshold(recorte, 0, 255,
+                               cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    tinta = binaria > 0
+    alto = np.zeros(w)
+    for columna in range(w):
+        filas = np.flatnonzero(tinta[:, columna])
+        if filas.size:
+            alto[columna] = (filas[-1] - filas[0] + 1) / h
+    minimo_puente = max(3, int(round(h * .04)))
+    limite = int(w * .75)
+    columna = 0
+    while columna < limite:
+        if alto[columna] >= BRAZO_MAXIMO or alto[columna] == 0:
+            columna += 1
+            continue
+        fin = columna
+        while fin < w and 0 < alto[fin] < BRAZO_MAXIMO:
+            fin += 1
+        if (fin - columna >= minimo_puente
+                and alto[:columna].max(initial=0) >= PALO_SIGNO
+                and alto[fin:].max(initial=0) >= ALTURA_CIFRA_PEGADA
+                and _es_cruz(tinta, columna, fin, h)):
+            return [(x + fin, y, w - fin, h)] + list(cajas_b[1:])
+        columna = fin
+    return cajas_b
 
 
 def sin_signo_mas(cajas_b, referencias):
@@ -345,6 +429,13 @@ def unir_solapadas(cajas):
     suelta del palo; sin unirlas, cada trozo se lee como un 1 y "37" sale
     "311". A diferencia de unir_partidas, esto no depende de las columnas, así
     que vale también para el resultado.
+
+    El solape se mide contra la pieza más ancha, no contra la más estrecha.
+    Una cifra de raya larga, como un 4, puede tener la caja estirada por
+    encima de la cifra vecina: la estrecha queda entera debajo, pero la ancha
+    apenas se solapa con ella, y midiendo contra la estrecha "46" se unía y
+    salía "6". Los trozos de un 7 roto, en cambio, son de tamaño parecido y se
+    solapan mucho con cualquiera de los dos.
     """
     salida = []
     for caja in sorted(cajas, key=lambda c: c[0]):
@@ -352,7 +443,7 @@ def unir_solapadas(cajas):
             x, y, w, h = salida[-1][:4]
             cx, cy, cw, ch = caja[:4]
             solape = min(x + w, cx + cw) - max(x, cx)
-            if solape > SOLAPE_MISMA_CIFRA * min(w, cw):
+            if solape > SOLAPE_MISMA_CIFRA * max(w, cw):
                 x1, y1 = min(x, cx), min(y, cy)
                 x2, y2 = max(x + w, cx + cw), max(y + h, cy + ch)
                 salida[-1] = (x1, y1, x2 - x1, y2 - y1)
@@ -368,6 +459,7 @@ def separar_cifras(gris, cajas_de_fila, nombres):
     referencia = [por_fila[n] for n in nombres if n != 'operando_b']
     if 'operando_b' in por_fila:
         por_fila['operando_b'] = sin_signo_mas(por_fila['operando_b'], referencia)
+        por_fila['operando_b'] = sin_signo_pegado(gris, por_fila['operando_b'])
     columnas, altura = columnas_comunes(por_fila)
     por_fila = {n: reparar_fila(gris, c, columnas, altura)
                 for n, c in por_fila.items()}
