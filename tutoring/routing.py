@@ -6,8 +6,9 @@ la cabecera de actualización de protocolo.
 """
 from django.urls import path
 
-from . import consumers
+from . import consumers, consumers_tutoria
 
 websocket_urlpatterns = [
     path("ws/deteccion/", consumers.DeteccionConsumer.as_asgi()),
+    path("ws/tutoria/", consumers_tutoria.TutoriaConsumer.as_asgi()),
 ]

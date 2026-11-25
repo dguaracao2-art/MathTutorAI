@@ -1,4 +1,8 @@
-"""Diagnóstico, dos pistas progresivas y reintento dentro de la sesión actual."""
+"""Diagnóstico, dos pistas progresivas y reintento dentro de la sesión actual.
+
+Las pistas también pueden llegar por el canal ``/ws/tutoria/`` sin recargar la
+página; estas vistas siguen siendo la vía de siempre y el respaldo del canal.
+"""
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect, render
@@ -8,6 +12,7 @@ from django.views.decorators.http import require_POST
 from .models import Attempt
 from .services.hints import hints_for
 from .services.sum_review import review_sum
+from .services.tutoria_vivo import avisar_progreso, registros_de
 from .views import _selected_exercise, _snapshot
 
 
@@ -16,24 +21,24 @@ def _context(request, *, submitted=False, reviewed=False):
     if exercise is None:
         request.session.pop('confirmed_sum', None)
         request.session.pop('sum_review', None)
-        messages.info(request, 'Elige una suma disponible para continuar.')
+        messages.info(request, 'Elige una suma para empezar.')
         return None, None, redirect('tutoring:exercise_list')
     confirmed = request.session.get('confirmed_sum')
     if (not isinstance(confirmed, dict) or not confirmed.get('confirmation_id')
             or confirmed.get('exercise_id') != exercise.pk
             or confirmed.get('operand_a') != exercise.operand_a
             or confirmed.get('operand_b') != exercise.operand_b):
-        messages.info(request, 'Primero carga una fotografía y confirma sus números.')
+        messages.info(request, 'Primero toma una foto de tu suma y revisa los números.')
         return None, None, redirect('tutoring:exercise_detail')
     if submitted and (
         request.POST.get('confirmation_id') != confirmed['confirmation_id']
         or request.POST.get('exercise_id') != str(exercise.pk)
     ):
-        messages.info(request, 'La lectura cambió. Revisa la fotografía actual antes de continuar.')
+        messages.info(request, 'La foto cambió. Revisa los números de la foto nueva antes de seguir.')
         return None, None, redirect('tutoring:exercise_detail')
     state = request.session.get('sum_review', {})
     if reviewed and state.get('confirmation_id') != confirmed['confirmation_id']:
-        messages.info(request, 'Pulsa «Comprobar mi suma» después de confirmar la lectura.')
+        messages.info(request, 'Primero pulsa «Comprobar mi suma».')
         return None, None, redirect('tutoring:exercise_detail')
     return exercise, confirmed, None
 
@@ -73,6 +78,8 @@ def check_sum(request):
             'confirmation_id': confirmed['confirmation_id'],
             'hint_level': 0, 'corrected': corrected,
         }
+        # Las pantallas de «Mi progreso» abiertas se actualizan solas.
+        avisar_progreso(request.user.pk)
     return redirect('tutoring:review_result')
 
 
@@ -113,8 +120,9 @@ def show_hint(request):
                 user=request.user, confirmation_id=confirmed['confirmation_id'],
                 hint_count__lt=level + 1,
             ).update(hint_count=level + 1)
+            avisar_progreso(request.user.pk)
         elif request.POST.get('level') != str(level):
-            messages.info(request, 'Consulta primero la siguiente pista disponible.')
+            messages.info(request, 'Pide primero la pista que sigue.')
     return redirect('tutoring:review_result')
 
 
@@ -127,23 +135,11 @@ def retry_sum(request):
         return error
     request.session.pop('confirmed_sum', None)
     request.session.pop('sum_review', None)
-    messages.info(request, 'Corrige la suma en tu hoja. Después carga o captura una nueva fotografía.')
+    messages.info(request, 'Corrige tu suma en la hoja y luego toma otra foto.')
     return redirect('tutoring:exercise_detail')
 
 
 @never_cache
 @login_required
 def progress(request):
-    attempts = Attempt.objects.filter(user=request.user).select_related('exercise')
-    seen = {}
-    for attempt in attempts:
-        key = attempt.exercise_id
-        if key not in seen:
-            seen[key] = {
-                'exercise': f'{attempt.operand_a} + {attempt.operand_b}',
-                'date': attempt.created_at, 'status': attempt.get_status_display(),
-                'attempts': 0, 'hints': 0,
-            }
-        seen[key]['attempts'] += 1
-        seen[key]['hints'] += attempt.hint_count
-    return render(request, 'tutoring/progress.html', {'records': list(seen.values())})
+    return render(request, 'tutoring/progress.html', {'records': registros_de(request.user)})

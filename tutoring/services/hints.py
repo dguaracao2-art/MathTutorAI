@@ -1,55 +1,67 @@
-"""Pistas de dos pasos, pendientes de revisión docente antes del piloto.
+"""Pistas de dos pasos, escritas para niños de primeros años de básica.
 
 Usan cifras ya confirmadas para orientar una acción; no entregan el resultado.
+Frases cortas, en tú, con las letras U, D y C que el niño ve en la tabla de su
+suma. Siguen pendientes de revisión docente antes del piloto.
 """
+from .sum_review import COLUMN_LABELS, COLUMN_NAMES
+
 SECOND_HINTS = {
     'carry_annotation': (
-        'Vuelve a la columna anterior y comprueba si formas un grupo de diez. '
-        'Solo ese grupo pasa a la siguiente columna. Compara con la marca que anotaste.'
+        'Suma otra vez la columna de la derecha. Si te da 10 o más, te llevas 1. '
+        'Si te da menos de 10, no te llevas nada.'
     ),
     'column_sum': (
-        'Señala las dos cifras de esta columna. Cuenta sus cantidades juntas '
-        'y compara lo que obtienes con la cifra que escribiste.'
+        'Suma solo los dos números de esta columna, con calma. '
+        '¿Te da lo mismo que escribiste abajo?'
     ),
     'incoming_carry': (
-        'Antes de sumar esta columna, vuelve a la anterior. Si formas un grupo '
-        'de diez, ese grupo pasa a la columna que estás revisando.'
+        'Mira la columna de la derecha: ¿te dio 10 o más? '
+        'Entonces te llevas 1 a esta columna, y ese 1 también se suma aquí.'
     ),
     'outgoing_carry': (
-        'Junta las cantidades de esta columna en grupos de diez. Deja aquí las '
-        'unidades sueltas y lleva el grupo de diez a la siguiente columna. '
-        'Ahora compara con tu hoja.'
+        'Cuando una columna da 10 o más, abajo escribes solo el número de la '
+        'derecha y te llevas 1 a la columna de al lado.'
     ),
     'extra_column': (
-        'Observa la cifra que añadiste a la izquierda. Revisa si la columna '
-        'anterior forma un grupo de diez que deba pasar a ese lugar.'
+        'Ese número solo va si la columna de al lado te dio 10 o más. '
+        'Súmala otra vez: ¿te dio 10 o más?'
     ),
 }
+
+
+def _letra(nombre):
+    """U, D, C o UM, como en la tabla de la suma."""
+    return COLUMN_LABELS[COLUMN_NAMES.index(nombre)]
 
 
 def hints_for(review):
     if review['status'] != 'requiere_revision':
         return []
     name = review['column_name']
+    letra = _letra(name)
     if review.get('mismatch_kind') == 'carry':
-        first = (f'Mira la marca pequeña que confirmaste sobre las {name}. '
-                 'Comprueba que es la misma que aparece en tu hoja.')
+        first = (f'Mira la marca pequeña que pusiste arriba de la columna {letra} '
+                 f'({name}). Es el número que te llevas. ¿Es igual al de tu hoja?')
+    elif review['hint_code'] == 'extra_column':
+        # En esa columna no hay números que sumar: solo el que escribió el niño.
+        first = (f'Mira la columna {letra} ({name}), a la izquierda de todo. '
+                 'Ahí escribiste un número de más.')
     elif name == 'unidades':
-        first = ('Empieza por la derecha: busca las unidades y señala con tu dedo '
-                 'las dos cifras de esa columna. Vamos a trabajar solo ahí.')
+        first = ('Empieza por la derecha, en la columna U (unidades). '
+                 'Pon tu dedo sobre los dos números de esa columna.')
     else:
-        first = (f'Busca la columna de las {name}. Sigue esa columna con tu dedo '
-                 'para localizar las cifras que vas a sumar.')
+        first = (f'Busca la columna {letra} ({name}). '
+                 'Pon tu dedo sobre los dos números de esa columna.')
     second = SECOND_HINTS[review['hint_code']]
     if review['hint_code'] == 'column_sum':
         column = next((item for item in review.get('columns', []) if item['name'] == name), None)
         if column is not None:
             a, b = int(column['operand_a'] or 0), int(column['operand_b'] or 0)
             if min(a, b) == 0:
-                second = ('Una de las cifras es 0. Piensa qué ocurre al sumar cero a '
-                          'la otra cantidad y compara con lo que escribiste en esa columna.')
+                second = ('Uno de los números es 0. Si sumas 0, el otro número no '
+                          'cambia. ¿Qué escribiste tú abajo?')
             else:
-                second = (f'En esta columna tienes {a} y {b}. Empieza por {max(a, b)} '
-                          f'y cuenta {min(a, b)} pasos más, uno por cada dedo. '
-                          'Compara lo que obtienes con la cifra de tu hoja.')
+                second = (f'Aquí tienes {a} y {b}. Empieza en {max(a, b)} y cuenta '
+                          f'{min(a, b)} más con tus dedos. ¿Te da lo mismo que escribiste?')
     return [first, second]

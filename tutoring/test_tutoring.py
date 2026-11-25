@@ -96,7 +96,7 @@ class ReviewFlowTests(TestCase):
         self.assertIn('Comprobar mi suma', self.client.get(reverse('tutoring:exercise_detail')).content.decode())
         self.assertRedirects(self.action('check_sum', confirmed), reverse('tutoring:review_result'))
         page = self.client.get(reverse('tutoring:review_result'))
-        self.assertContains(page, 'Requiere revisión')
+        self.assertContains(page, '¡Casi! Revisemos juntos')
         self.assertContains(page, 'unidades')
         self.assertNotContains(page, 'Pista 1')
         self.assertNotContains(page, '>37<')
@@ -138,9 +138,9 @@ class ReviewFlowTests(TestCase):
         self.client.force_login(self.user)
         progress = self.client.get(reverse('tutoring:progress'))
         self.assertContains(progress, '23 + 14')
-        self.assertContains(progress, 'Requiere revisión')
+        self.assertContains(progress, 'Por corregir')
         self.assertContains(progress, 'Intentos: 1')
-        self.assertContains(progress, 'Pistas consultadas: 1')
+        self.assertContains(progress, 'Pistas usadas: 1')
         self.assertNotIn('otro', progress.content.decode())
 
     def test_correct_first_time_is_correcto(self):
