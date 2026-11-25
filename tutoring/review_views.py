@@ -10,7 +10,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
 from .models import Attempt
-from .services.hints import hints_for
+from .services.hints import pistas_de
 from .services.sum_review import review_sum
 from .services.tutoria_vivo import avisar_progreso, registros_de
 from .views import _selected_exercise, _snapshot
@@ -92,11 +92,13 @@ def review_result(request):
     review = review_sum(confirmed['operand_a'], confirmed['operand_b'],
                             confirmed['written_result'], carries=confirmed.get('carries'))
     state = request.session['sum_review']
-    available = hints_for(review)
+    # Todas las columnas por revisar, de derecha a izquierda, dos pistas cada una.
+    available = pistas_de(review)
     level = state['hint_level']
     return render(request, 'tutoring/sum_result.html', {
         'exercise': exercise, 'confirmed': confirmed, 'review': review,
         'hints': available[:level], 'next_hint': level + 1 if level < len(available) else None,
+        'siguiente': available[level] if level < len(available) else None,
         'hint_count': level, 'corrected': state['corrected'],
         'attempt_count': request.session['sum_practice']['attempts'],
     })
@@ -113,7 +115,7 @@ def show_hint(request):
                             confirmed['written_result'], carries=confirmed.get('carries'))
     state = request.session['sum_review']
     level = state['hint_level']
-    if review['status'] == 'requiere_revision' and level < 2:
+    if review['status'] == 'requiere_revision' and level < len(pistas_de(review)):
         if request.POST.get('level') == str(level + 1):
             request.session['sum_review'] = {**state, 'hint_level': level + 1}
             Attempt.objects.filter(

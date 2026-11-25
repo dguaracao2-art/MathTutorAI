@@ -75,7 +75,7 @@
         if (form) form.submit();
     }
 
-    function agregarPista(nivel, texto) {
+    function agregarPista(nivel, tituloTexto, texto) {
         const lista = raiz.querySelector("[data-pistas]");
         if (!lista) return;
         const tarjeta = document.createElement("div");
@@ -83,9 +83,10 @@
         tarjeta.dataset.nivel = String(nivel);
         const titulo = document.createElement("h4");
         titulo.className = "h6";
-        titulo.textContent = "Pista " + nivel;
+        titulo.textContent = tituloTexto || ("Pista " + nivel);
         const parrafo = document.createElement("p");
         parrafo.className = "mb-0";
+        parrafo.style.whiteSpace = "pre-line";
         parrafo.textContent = texto;
         tarjeta.appendChild(titulo);
         tarjeta.appendChild(parrafo);
@@ -105,19 +106,19 @@
         pendiente = null;
 
         const yaMostrada = raiz.querySelector('[data-pistas] [data-nivel="' + datos.nivel + '"]');
-        if (!yaMostrada) agregarPista(datos.nivel, datos.texto);
+        if (!yaMostrada) agregarPista(datos.nivel, datos.titulo, datos.texto);
 
         const boton = form.querySelector("button");
         if (datos.siguiente) {
             form.querySelector('input[name="level"]').value = String(datos.siguiente);
             if (boton) {
-                boton.textContent = "Ver pista " + datos.siguiente;
+                boton.textContent = datos.boton || "Ver otra pista";
                 boton.disabled = false;
             }
         } else {
             const fin = document.createElement("p");
             fin.className = "text-secondary";
-            fin.textContent = "Ya viste las dos pistas. Corrige tu hoja y, si necesitas ayuda, pregúntale a tu profe.";
+            fin.textContent = "Ya viste todas las pistas. Corrige en tu hoja las columnas marcadas con «Revisa» y toma otra foto.";
             form.replaceWith(fin);
         }
     }

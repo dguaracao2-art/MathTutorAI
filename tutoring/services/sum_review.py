@@ -1,5 +1,10 @@
 """Reglas aritméticas sobre números confirmados; no infieren causas del error.
 
+Además de la primera discrepancia (el contrato de RNF-06, que siguen usando la
+API y las pruebas de aceptación), se devuelven TODAS las columnas por revisar
+en ``discrepancias``. Así el niño ve de una vez todo lo que debe corregir y no
+tiene que reescribir su suma con esfero una vez por cada columna.
+
 La respuesta correcta y las cifras esperadas no se incluyen en la presentación.
 Evalúa únicamente marcas de llevada transcritas y confirmadas por el usuario.
 El OCR todavía no reconoce esas marcas.
@@ -29,23 +34,32 @@ def review_sum(operand_a, operand_b, written_result, *, carries=None):
     mismatch, hint_code, carry = None, None, 0
     mismatch_kind = None
     columns = []
+    discrepancias = []
     for index in range(width):
         place = 10 ** index
         subtotal = operand_a // place % 10 + operand_b // place % 10 + carry
-        if mismatch is None and written_result // place % 10 != subtotal % 10:
-            mismatch = index
-            mismatch_kind = 'result'
-            if carry:
-                hint_code = 'incoming_carry'
-            elif subtotal >= 10:
-                hint_code = 'outgoing_carry'
-            elif index >= max(len(str(operand_a)), len(str(operand_b))):
-                hint_code = 'extra_column'
-            else:
-                hint_code = 'column_sum'
         written_carry = carries.get(COLUMN_NAMES[index])
-        if mismatch is None and written_carry is not None and written_carry != carry:
-            mismatch, mismatch_kind, hint_code = index, 'carry', 'carry_annotation'
+        # Cada columna se juzga con la llevada correcta, no con la del niño.
+        kind_here, code_here = None, None
+        if written_result // place % 10 != subtotal % 10:
+            kind_here = 'result'
+            if carry:
+                code_here = 'incoming_carry'
+            elif subtotal >= 10:
+                code_here = 'outgoing_carry'
+            elif index >= max(len(str(operand_a)), len(str(operand_b))):
+                code_here = 'extra_column'
+            else:
+                code_here = 'column_sum'
+        elif written_carry is not None and written_carry != carry:
+            kind_here, code_here = 'carry', 'carry_annotation'
+        if kind_here is not None:
+            discrepancias.append({
+                'index': index, 'name': COLUMN_NAMES[index], 'label': COLUMN_LABELS[index],
+                'kind': kind_here, 'hint_code': code_here,
+            })
+            if mismatch is None:
+                mismatch, mismatch_kind, hint_code = index, kind_here, code_here
         carry = subtotal // 10
         columns.append({
             'label': COLUMN_LABELS[index], 'name': COLUMN_NAMES[index],
@@ -55,6 +69,9 @@ def review_sum(operand_a, operand_b, written_result, *, carries=None):
             'needs_review': mismatch == index,
             'result_needs_review': mismatch == index and mismatch_kind == 'result',
             'carry_needs_review': mismatch == index and mismatch_kind == 'carry',
+            'por_revisar': kind_here is not None,
+            'resultado_por_revisar': kind_here == 'result',
+            'llevada_por_revisar': kind_here == 'carry',
             'written_carry': str(written_carry) if written_carry is not None else '',
         })
     return {
@@ -63,4 +80,5 @@ def review_sum(operand_a, operand_b, written_result, *, carries=None):
         'column_name': COLUMN_NAMES[mismatch] if mismatch is not None else None,
         'hint_code': hint_code, 'columns': list(reversed(columns)),
         'mismatch_kind': mismatch_kind, 'carry_count': len(carries),
+        'discrepancias': discrepancias,
     }

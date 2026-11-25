@@ -13,7 +13,7 @@
     <p class="mb-0">{% if corrected %}Encontraste el error y lo arreglaste.{% else %}Sumaste bien todas las columnas.{% endif %}{% if review.carry_count %} Lo que te llevaste también está bien.{% endif %} ¿Practicamos otra suma?</p></div>
 {% else %}
 <div class="alert alert-danger" role="status"><h3 class="h5">¡Casi! Revisemos juntos</h3>
-    <p class="mb-0">Algo no cuadra en la columna {% for column in review.columns %}{% if column.needs_review %}<strong>{{ column.label }}</strong>{% endif %}{% endfor %} (las {{ review.column_name }}). La marcamos con «Revisa».{% if review.mismatch_kind == "carry" %} Fíjate en el número que te llevaste.{% endif %}</p></div>
+    {% with por_revisar=review.discrepancias %}<p class="mb-0">{% if por_revisar|length > 1 %}Hay {{ por_revisar|length }} columnas por revisar: {% for d in por_revisar %}<strong>{{ d.label }}</strong>{% if not forloop.last %}{% if forloop.revcounter == 2 %} y {% else %}, {% endif %}{% endif %}{% endfor %}. Las marcamos con «Revisa». Vamos de derecha a izquierda, una por una.{% else %}Algo no cuadra en la columna <strong>{{ por_revisar.0.label }}</strong> (las {{ review.column_name }}). La marcamos con «Revisa».{% if review.mismatch_kind == "carry" %} Fíjate en el número que te llevaste.{% endif %}{% endif %}</p>{% endwith %}</div>
 {% endif %}
 
 {% comment %}
@@ -24,13 +24,13 @@ las pistas quedan al lado de la suma revisada, sin desplazarse.
 <div class="table-responsive"><table class="table sum-columns text-center align-middle">
     <caption>Tu suma, columna por columna.</caption>
     <thead><tr><th scope="col"><span class="visually-hidden">Fila</span></th>
-        {% for column in review.columns %}<th scope="col" {% if column.needs_review %}class="review-cell"{% endif %}><abbr title="{{ column.name }}">{{ column.label }}</abbr></th>{% endfor %}
+        {% for column in review.columns %}<th scope="col" {% if column.por_revisar %}class="review-cell"{% endif %}><abbr title="{{ column.name }}">{{ column.label }}</abbr></th>{% endfor %}
     </tr></thead>
     <tbody class="font-monospace fs-4">
-        {% if review.carry_count %}<tr><th scope="row" class="small fs-6">Llevadas</th>{% for column in review.columns %}<td class="small fs-6 {% if column.carry_needs_review %}review-cell fw-bold{% endif %}">{{ column.written_carry }}{% if column.carry_needs_review %}<span class="d-block">Revisa</span>{% endif %}</td>{% endfor %}</tr>{% endif %}
+        {% if review.carry_count %}<tr><th scope="row" class="small fs-6">Llevadas</th>{% for column in review.columns %}<td class="small fs-6 {% if column.llevada_por_revisar %}review-cell fw-bold{% endif %}">{{ column.written_carry }}{% if column.llevada_por_revisar %}<span class="d-block text-nowrap">Revisa</span>{% endif %}</td>{% endfor %}</tr>{% endif %}
         <tr><th scope="row"><span class="visually-hidden">Primer número</span></th>{% for column in review.columns %}<td>{{ column.operand_a }}</td>{% endfor %}</tr>
         <tr class="operand-line"><th scope="row">+</th>{% for column in review.columns %}<td>{{ column.operand_b }}</td>{% endfor %}</tr>
-        <tr><th scope="row"><span class="visually-hidden">Tu resultado</span></th>{% for column in review.columns %}<td {% if column.result_needs_review %}class="review-cell fw-bold"{% endif %}>{{ column.written_result }}{% if column.result_needs_review %}<span class="d-block small fs-6">Revisa</span>{% endif %}</td>{% endfor %}</tr>
+        <tr><th scope="row"><span class="visually-hidden">Tu resultado</span></th>{% for column in review.columns %}<td {% if column.resultado_por_revisar %}class="review-cell fw-bold"{% endif %}>{% if column.written_result %}{{ column.written_result }}{% elif column.resultado_por_revisar %}<span class="text-secondary" aria-label="casilla vacía">?</span>{% endif %}{% if column.resultado_por_revisar %}<span class="d-block small fs-6 text-nowrap">Revisa</span>{% endif %}</td>{% endfor %}</tr>
     </tbody>
 </table></div>
 
@@ -38,13 +38,13 @@ las pistas quedan al lado de la suma revisada, sin desplazarse.
 {% if review.status == 'requiere_revision' %}
 <section aria-labelledby="tutoring-title" data-tutoria-vivo="pistas"><h3 id="tutoring-title" class="h5">Pistas para ayudarte</h3>
     <p class="text-secondary">Pide una pista si la necesitas. Después corrige tu suma en la hoja.</p>
-    <div data-pistas aria-live="polite">{% for hint in hints %}<div class="alert hint-card" data-nivel="{{ forloop.counter }}"><h4 class="h6">Pista {{ forloop.counter }}</h4><p class="mb-0">{{ hint }}</p></div>{% endfor %}</div>
+    <div data-pistas aria-live="polite">{% for pista in hints %}<div class="alert hint-card" data-nivel="{{ forloop.counter }}"><h4 class="h6">Pista {{ pista.paso }} · columna {{ pista.columna }}</h4><p class="mb-0" style="white-space: pre-line">{{ pista.texto }}</p></div>{% endfor %}</div>
     {% if next_hint %}<form method="post" action="{% url 'tutoring:show_hint' %}" class="mb-3" data-pista>
         {% csrf_token %}<input type="hidden" name="exercise_id" value="{{ exercise.pk }}">
         <input type="hidden" name="confirmation_id" value="{{ confirmed.confirmation_id }}">
         <input type="hidden" name="level" value="{{ next_hint }}">
-        <button type="submit" class="btn btn-outline-primary w-100">Ver pista {{ next_hint }}</button></form>
-    {% else %}<p class="text-secondary">Ya viste las dos pistas. Corrige tu hoja y, si necesitas ayuda, pregúntale a tu profe.</p>{% endif %}
+        <button type="submit" class="btn btn-outline-primary w-100">Ver pista {{ siguiente.paso }} de la columna {{ siguiente.columna }}</button></form>
+    {% else %}<p class="text-secondary">Ya viste todas las pistas. Corrige en tu hoja las columnas marcadas con «Revisa» y toma otra foto.</p>{% endif %}
     <form method="post" action="{% url 'tutoring:retry_sum' %}">
         {% csrf_token %}<input type="hidden" name="exercise_id" value="{{ exercise.pk }}">
         <input type="hidden" name="confirmation_id" value="{{ confirmed.confirmation_id }}">
@@ -57,5 +57,5 @@ las pistas quedan al lado de la suma revisada, sin desplazarse.
 <div class="d-flex gap-2 flex-wrap mt-4"><a href="{% url 'tutoring:exercise_list' %}" class="btn btn-outline-primary">Elegir otra suma</a>
     <a href="{% url 'tutoring:progress' %}" class="btn btn-outline-primary">Ver mi progreso</a>
     <form method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}<button type="submit" class="btn btn-outline-secondary">Cerrar sesión</button></form></div>
-<script src="{% static 'tutoring/tutoria_vivo.js' %}?v=vivo2" defer></script>
+<script src="{% static 'tutoring/tutoria_vivo.js' %}?v=vivo5" defer></script>
 {% endblock %}

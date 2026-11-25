@@ -1,7 +1,7 @@
 """Tutoría en tiempo real: pistas sin recargar y progreso que se actualiza solo.
 
 Lo usan el canal ``/ws/tutoria/`` y las vistas HTTP de la revisión. Aquí no
-hay reglas nuevas: las pistas salen de ``hints_for`` y la revisión de
+hay reglas nuevas: las pistas salen de ``pistas_de`` y la revisión de
 ``review_sum``, igual que en la pantalla de siempre. El canal solo cambia
 cómo llegan al estudiante.
 
@@ -28,7 +28,7 @@ from django.utils import timezone
 from django.utils.dateformat import format as formatear_fecha
 
 from ..models import Attempt
-from .hints import hints_for
+from .hints import pistas_de
 from .sum_review import review_sum
 
 logger = logging.getLogger(__name__)
@@ -106,7 +106,7 @@ def pedir_pista(clave_sesion, user, confirmation_id, nivel):
 
     revision = review_sum(confirmada['operand_a'], confirmada['operand_b'],
                           confirmada['written_result'], carries=confirmada.get('carries'))
-    disponibles = hints_for(revision)
+    disponibles = pistas_de(revision)
     actual = estado.get('hint_level', 0)
     if revision['status'] != 'requiere_revision' or not disponibles:
         return {'tipo': 'aviso', 'texto': AVISO_SIN_PISTAS}
@@ -123,9 +123,14 @@ def pedir_pista(clave_sesion, user, confirmation_id, nivel):
     else:
         return {'tipo': 'aviso', 'texto': AVISO_ORDEN}
 
+    pista = disponibles[nivel - 1]
+    siguiente = disponibles[nivel] if nivel < len(disponibles) else None
     return {
-        'tipo': 'pista', 'nivel': nivel, 'texto': disponibles[nivel - 1],
-        'siguiente': nivel + 1 if nivel < len(disponibles) else None,
+        'tipo': 'pista', 'nivel': nivel, 'texto': pista['texto'],
+        'titulo': f"Pista {pista['paso']} · columna {pista['columna']}",
+        'siguiente': nivel + 1 if siguiente else None,
+        'boton': (f"Ver pista {siguiente['paso']} de la columna {siguiente['columna']}"
+                  if siguiente else None),
     }
 
 
